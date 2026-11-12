@@ -57,7 +57,12 @@ def main() -> None:
     while True:
         jobs = sorted(QUEUE.glob("*.job"), key=lambda p: p.stat().st_mtime)
         for job in jobs:
-            run_job(job)
+            if not job.exists():  # задание убрали из очереди, пока шло предыдущее
+                continue
+            try:
+                run_job(job)
+            except Exception as error:  # раннер не должен падать из-за одного задания
+                print(f"[{time.strftime('%H:%M:%S')}] {job.name}: ошибка раннера {error}", flush=True)
         time.sleep(3)
 
 

@@ -451,10 +451,6 @@ class ProxyClient:
             "temperature": self.s.temperature if temperature is None else temperature,
             "max_tokens": (max_tokens or self.s.max_tokens) + (3000 if self.s.enable_thinking else 0),
         }
-        if not self.s.enable_thinking:
-            msgs = [dict(m) for m in messages]
-            msgs[-1]["content"] = msgs[-1]["content"].rstrip() + "\n/no_think"
-            payload["messages"] = messages = msgs
         sent_kwargs = self.no_think_kwargs
         if sent_kwargs:
             payload["chat_template_kwargs"] = {"enable_thinking": self.s.enable_thinking}
@@ -467,6 +463,7 @@ class ProxyClient:
                 with self._lock:
                     self.no_think_kwargs = False
                 payload.pop("chat_template_kwargs", None)
+                payload["messages"] = _no_think(messages, self.s.enable_thinking)
                 data = self.post("/chat/completions", payload, timeout=timeout, retries=retries)
             else:
                 raise
@@ -483,11 +480,21 @@ class ProxyClient:
             if finish == "length" and payload["max_tokens"] < 8000:
                 # модель всё-таки размышляла и не успела ответить: даём больше токенов один раз
                 payload["max_tokens"] = min(8000, payload["max_tokens"] * 3)
+                payload["messages"] = _no_think(messages, self.s.enable_thinking)
                 data = self.post("/chat/completions", payload, timeout=timeout, retries=retries)
                 content = strip_reasoning(str(data["choices"][0]["message"].get("content") or ""))
             if not content.strip():
                 raise LLMError("chat: пустой ответ (возможно, токены ушли на размышления)")
         return content
+
+
+def _no_think(messages: list[dict], thinking: bool) -> list[dict]:
+    # мягкий выключатель размышлений qwen3, если прокси не понял chat_template_kwargs
+    if thinking:
+        return messages
+    msgs = [dict(m) for m in messages]
+    msgs[-1]["content"] = msgs[-1]["content"].rstrip() + "\n/no_think"
+    return msgs
 
 
 # формат запроса, рекомендованный для Qwen3-Reranker в /v1/rerank (документация vLLM)
