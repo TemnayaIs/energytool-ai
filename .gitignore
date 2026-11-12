@@ -8,6 +8,7 @@ env/
 .env
 .env.*
 !.env.example
+!.env.local.example
 
 data/app.db
 data/app.db-shm
@@ -28,3 +29,4 @@ leaderboard/*.zip
 # Локальная оценка: результаты прогонов не коммитим
 eval/runs/
 eval/queue/
+eval/xfer/
