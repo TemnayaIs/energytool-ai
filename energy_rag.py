@@ -58,7 +58,7 @@ class Settings:
     self_check: bool = False
     fewshot_k: int = 4
     rerank_template: bool = True
-    think_on_numbers: bool = True
+    think_on_numbers: bool = False
     fewshot_exclude_exact: bool = False
 
     @classmethod
@@ -86,7 +86,7 @@ class Settings:
             self_check=env_flag("SELF_CHECK", False),
             fewshot_k=env_number("FEWSHOT_K", 4, 0, 8),
             rerank_template=env_flag("RERANK_TEMPLATE", True),
-            think_on_numbers=env_flag("THINK_ON_NUMBERS", True),
+            think_on_numbers=env_flag("THINK_ON_NUMBERS", False),
             fewshot_exclude_exact=env_flag("FEWSHOT_EXCLUDE_EXACT", False),
         )
 

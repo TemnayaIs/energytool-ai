@@ -226,6 +226,7 @@ def cmd_base(args) -> str:
 
 def cmd_zip(args) -> str:
     """Запускает solution.py из ZIP-сабмита на тех же вопросах (как платформа)."""
+    apply_overrides(args.set)
     load_dotenv()
     preflight()
     questions = read_csv([Path(p) for p in args.questions], "question")
@@ -392,6 +393,7 @@ def main() -> None:
     z.add_argument("--name", required=True)
     z.add_argument("--zip", required=True)
     z.add_argument("--kb-zip", default=str(ROOT.parent / "data" / "knowledge-base.zip"))
+    z.add_argument("--set", nargs="*", default=[], help="переменные окружения прогона, КЛЮЧ=ЗНАЧЕНИЕ")
 
     bsp = sub.add_parser("base", help="ответы имитации бейзлайна организаторов")
     common(bsp)
