@@ -75,6 +75,10 @@ class Settings:
     timeout: float = 60.0
     use_embeddings: bool = True
     use_reranker: bool = True
+    emb_base_url: str = ""  # отдельный сервер эмбеддингов (локальные тесты); пусто — общий прокси
+    emb_api_key: str = ""
+    enable_thinking: bool = False  # режим размышлений Qwen3 (эксперимент)
+    self_check: bool = False  # второй вызов: сверка ответа с контекстом (эксперимент)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -97,6 +101,10 @@ class Settings:
             timeout=float(env_number("LLM_TIMEOUT", 60, 10, 180)),
             use_embeddings=env_flag("USE_EMBEDDINGS", True),
             use_reranker=env_flag("USE_RERANKER", True),
+            emb_base_url=env("EMB_BASE_URL").rstrip("/"),
+            emb_api_key=env("EMB_API_KEY"),
+            enable_thinking=env_flag("ENABLE_THINKING", False),
+            self_check=env_flag("SELF_CHECK", False),
         )
 
     @property
@@ -385,11 +393,20 @@ class ProxyClient:
     def close(self) -> None:
         self.http.close()
 
-    def post(self, endpoint: str, payload: dict, *, timeout: float | None = None, retries: int | None = None) -> dict:
+    def post(
+        self,
+        endpoint: str,
+        payload: dict,
+        *,
+        timeout: float | None = None,
+        retries: int | None = None,
+        base_url: str = "",
+        api_key: str = "",
+    ) -> dict:
         if not self.s.llm_ready:
             raise LLMError("LLM_BASE_URL/LLM_API_KEY не заданы")
-        url = self.s.base_url + endpoint
-        headers = {"Authorization": f"Bearer {self.s.api_key}"}
+        url = (base_url or self.s.base_url) + endpoint
+        headers = {"Authorization": f"Bearer {api_key or self.s.api_key}"}
         attempts = self.retries if retries is None else retries
         last = "unknown"
         for attempt in range(attempts):
@@ -417,7 +434,13 @@ class ProxyClient:
         vectors: list[list[float]] = []
         for start in range(0, len(texts), batch):
             part = list(texts[start : start + batch])
-            data = self.post("/embeddings", {"model": self.s.emb_model, "input": part}, timeout=60)
+            data = self.post(
+                "/embeddings",
+                {"model": self.s.emb_model, "input": part},
+                timeout=60,
+                base_url=self.s.emb_base_url,
+                api_key=self.s.emb_api_key,
+            )
             items = sorted(data["data"], key=lambda d: d.get("index", 0))
             if len(items) != len(part):
                 raise LLMError("embeddings: размер ответа не совпадает")
@@ -460,11 +483,11 @@ class ProxyClient:
             "model": self.s.model,
             "messages": messages,
             "temperature": self.s.temperature if temperature is None else temperature,
-            "max_tokens": max_tokens or self.s.max_tokens,
+            "max_tokens": (max_tokens or self.s.max_tokens) + (3000 if self.s.enable_thinking else 0),
         }
         sent_kwargs = self.no_think_kwargs
         if sent_kwargs:
-            payload["chat_template_kwargs"] = {"enable_thinking": False}
+            payload["chat_template_kwargs"] = {"enable_thinking": self.s.enable_thinking}
         try:
             data = self.post("/chat/completions", payload, timeout=timeout, retries=retries)
         except LLMError as e:
@@ -476,7 +499,8 @@ class ProxyClient:
                     self.no_think_kwargs = False
                 payload.pop("chat_template_kwargs", None)
                 msgs = [dict(m) for m in messages]
-                msgs[-1]["content"] = msgs[-1]["content"] + "\n/no_think"
+                if not self.s.enable_thinking:
+                    msgs[-1]["content"] = msgs[-1]["content"] + "\n/no_think"
                 payload["messages"] = msgs
                 data = self.post("/chat/completions", payload, timeout=timeout, retries=retries)
             else:
@@ -908,12 +932,34 @@ class Consultant:
                     text = clean_answer(self.client.chat(messages, timeout=timeout, retries=retries))
                     if len(text.split()) < 5:
                         raise LLMError("слишком короткий ответ")
+                    if self.s.self_check and not _expired(deadline, 3 * self.s.timeout):
+                        text = self._self_check(dialog, context, guards, text, timeout, retries)
                     mode, err = "llm", ""
                 except Exception as e:  # noqa: BLE001
                     text, mode, err = extractive_answer(dialog, hits), "extractive", f"{type(e).__name__}: {e}"[:300]
         except Exception as e:  # noqa: BLE001
             text, mode, err = NO_INFO, "error", f"{type(e).__name__}: {e}"[:300]
         return Answer(text or NO_INFO, hits, mode, round((time.perf_counter() - started) * 1000), err)
+
+    def _self_check(self, dialog: Dialog, context: str, guards: str, draft: str, timeout, retries) -> str:
+        """Второй проход: убрать из черновика всё, что не подтверждено контекстом."""
+        prompt = (
+            f"КОНТЕКСТ ИЗ БАЗЫ ЗНАНИЙ:\n{context}\n\n"
+            + (f"ПРАВИЛА ПРОДУКТА:\n{guards}\n\n" if guards else "")
+            + (f"ИСТОРИЯ ДИАЛОГА:\n{dialog.history_text()}\n\n" if dialog.is_multi_turn else "")
+            + f"ВОПРОС КЛИЕНТА:\n{dialog.last_user}\n\nЧЕРНОВИК ОТВЕТА:\n{draft}\n\n"
+            "Проверь черновик по контексту. Исправь или удали утверждения, которых нет в контексте или "
+            "которые противоречат ему и правилам продукта; верни недостающий ключевой факт, если он прямо "
+            "отвечает на вопрос. Сохрани стиль: прямой ответ, суть, при необходимости один уточняющий вопрос, "
+            "обычно 40–90 слов, обычный текст. Если черновик верен — верни его без изменений. "
+            "Выведи только итоговый ответ, без пояснений."
+        )
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}]
+        try:
+            checked = clean_answer(self.client.chat(messages, timeout=timeout, retries=retries, temperature=0.0))
+            return checked if len(checked.split()) >= 5 else draft
+        except Exception:  # noqa: BLE001
+            return draft
 
     def complete(self, messages: list[dict], *, max_tokens: int = 600) -> str | None:
         """Свободная генерация (например, резюме заявки). None — если LLM недоступна."""
