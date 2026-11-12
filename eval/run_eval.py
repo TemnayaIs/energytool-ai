@@ -121,7 +121,11 @@ def preflight() -> None:
 
 
 def cmd_gen(args) -> str:
+    # пример с тем же вопросом в промпт не берём, иначе оценка нечестная
+    os.environ.setdefault("FEWSHOT_EXCLUDE_EXACT", "1")
     overrides = apply_overrides(args.set)
+    if os.environ.get("PIPELINE") == "base":
+        return cmd_base(args)
     preflight()
     sys.path.insert(0, str(ROOT))
     import energy_rag as er  # импорт после применения переменных
@@ -162,6 +166,61 @@ def cmd_gen(args) -> str:
     }
     path = write_answers(args.name, answers, meta)
     print(f"  -> {path}  {meta}")
+    return args.name
+
+
+BASELINE_PROMPT = """Ты — консультант компании МТС Energytool. Ответь на вопрос пользователя, используя информацию из контекста.
+Если ответа нет в контексте, скажи, что информации недостаточно.
+
+Контекст:
+{context}
+
+Вопрос: {question}
+
+Ответ:"""
+
+
+def cmd_base(args) -> str:
+    """Имитация простого бейзлайна: BM25 top-5 + «ответь по контексту», без требований к стилю."""
+    preflight()
+    sys.path.insert(0, str(ROOT))
+    import energy_rag as er
+
+    settings = er.Settings.from_env()
+    settings.use_embeddings = False
+    settings.use_reranker = False
+    settings.top_k = 5
+    kb = er.KnowledgeBase.load(args.kb or (ROOT / "data" / "knowledge-base"))
+    retriever = er.Retriever(kb, None, settings)
+    client = er.ProxyClient(settings)
+    questions = read_csv([Path(p) for p in args.questions], "question")
+    if args.limit:
+        questions = dict(list(questions.items())[: args.limit])
+
+    def one(item):
+        qid, q = item
+        hits = retriever.search(er.parse_dialog(q))[:5]
+        context = "\n\n".join(h.chunk.text for h in hits)
+        prompt = BASELINE_PROMPT.format(context=context, question=q)
+        try:
+            text = client.chat([{"role": "user", "content": prompt}], max_tokens=700, temperature=0.3)
+        except Exception as error:  # noqa: BLE001
+            text = f"Информации недостаточно. ({type(error).__name__})"
+        return qid, " ".join(text.split())
+
+    answers: dict[str, str] = {}
+    started = time.monotonic()
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        for i, (qid, text) in enumerate(pool.map(one, questions.items()), 1):
+            answers[qid] = text
+            print(f"  {i}/{len(questions)} id={qid} {len(text.split())} сл.")
+    meta = {
+        "name": args.name,
+        "pipeline": "baseline-imitation",
+        "seconds": round(time.monotonic() - started, 1),
+        "words_mean": round(statistics.mean(len(a.split()) for a in answers.values()), 1),
+    }
+    print(f"  -> {write_answers(args.name, answers, meta)}  {meta}")
     return args.name
 
 
@@ -334,6 +393,11 @@ def main() -> None:
     z.add_argument("--zip", required=True)
     z.add_argument("--kb-zip", default=str(ROOT.parent / "data" / "knowledge-base.zip"))
 
+    bsp = sub.add_parser("base", help="ответы имитации бейзлайна организаторов")
+    common(bsp)
+    bsp.add_argument("--name", required=True)
+    bsp.add_argument("--kb", default="")
+
     j = sub.add_parser("judge", help="сравнение двух прогонов")
     common(j)
     j.add_argument("--a", required=True, help="baseline")
@@ -351,6 +415,8 @@ def main() -> None:
             cmd_judge(args)
     elif args.cmd == "zip":
         cmd_zip(args)
+    elif args.cmd == "base":
+        cmd_base(args)
     else:
         cmd_judge(args)
 

@@ -78,10 +78,25 @@ def main() -> None:
     )
 
     stats: dict[str, int] = {}
+    progress = {"done": 0, "fast": False}
+    work_started = time.monotonic()
+
+    def behind_schedule() -> bool:
+        # если при текущем темпе не успеваем, отключаем эмбеддинги запроса и реранкер
+        done = progress["done"]
+        if done < 4:
+            return False
+        per_question = (time.monotonic() - work_started) / done
+        left = len(questions) - done
+        return per_question * left > (DEADLINE - time.monotonic()) * 0.8
 
     def work(item: tuple[str, str]) -> tuple[str, str]:
         qid, question = item
-        result = bot.answer(parse_dialog(question or "Здравствуйте"), deadline=DEADLINE)
+        if not progress["fast"] and behind_schedule():
+            progress["fast"] = True
+            log("не успеваем по времени: дальше без реранкера и эмбеддингов запроса")
+        result = bot.answer(parse_dialog(question or "Здравствуйте"), deadline=DEADLINE, fast=progress["fast"])
+        progress["done"] += 1
         stats[result.mode] = stats.get(result.mode, 0) + 1
         if result.error:
             log(f"id={qid}: {result.mode} ({result.error})")

@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 FILES = {
     "solution.py": "solution.py",
     "energy_rag.py": "energy_rag.py",
+    "examples.py": "examples.py",
     "requirements-solution.txt": "requirements.txt",
 }
 OUTPUT = ROOT / "submission.zip"

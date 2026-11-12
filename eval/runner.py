@@ -19,7 +19,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 QUEUE = ROOT / "eval" / "queue"
-ALLOWED = {"gen", "zip", "judge"}
+ALLOWED = {"gen", "zip", "judge", "base"}
 
 
 def run_job(job: Path) -> None:

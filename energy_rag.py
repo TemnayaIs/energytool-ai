@@ -56,10 +56,11 @@ class Settings:
     emb_api_key: str = ""
     enable_thinking: bool = False
     self_check: bool = False
+    fewshot_k: int = 4
+    fewshot_exclude_exact: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
-        temperature = env_number("TEMPERATURE", 0.1, 0.0, 2.0, float)
         max_tokens = env_number("MAX_TOKENS", 700, 64, 8192)
         return cls(
             base_url=env("LLM_BASE_URL", "OPENAI_BASE_URL", "BASE_URL").rstrip("/"),
@@ -68,11 +69,11 @@ class Settings:
             emb_model=env("EMB_MODEL", default="BAAI/bge-m3"),
             reranker_model=env("RERANKER_MODEL", default="Qwen/Qwen3-Reranker-8B"),
 
-            temperature=min(temperature, 0.3),  # высокая температура портит факты
+            temperature=env_number("ANSWER_TEMPERATURE", 0.0, 0.0, 1.0, float),  # для фактов нужна детерминированность
 
             max_tokens=max(450, min(max_tokens, 1200)),
             top_k=max(6, env_number("TOP_K", 8, 3, 16)),
-            rerank_candidates=max(env_number("RERANKER_TOP_N", 24, 4, 40), 16),
+            rerank_candidates=max(env_number("RERANK_CANDIDATES", 12, 4, 40), 8),
             timeout=float(env_number("LLM_TIMEOUT", 60, 10, 180)),
             use_embeddings=env_flag("USE_EMBEDDINGS", True),
             use_reranker=env_flag("USE_RERANKER", True),
@@ -80,6 +81,8 @@ class Settings:
             emb_api_key=env("EMB_API_KEY"),
             enable_thinking=env_flag("ENABLE_THINKING", False),
             self_check=env_flag("SELF_CHECK", False),
+            fewshot_k=env_number("FEWSHOT_K", 4, 0, 8),
+            fewshot_exclude_exact=env_flag("FEWSHOT_EXCLUDE_EXACT", False),
         )
 
     @property
@@ -618,7 +621,7 @@ class Retriever:
         sims = [_dot(qvec, v) for v in self.vectors]
         return sorted(range(len(sims)), key=lambda i: sims[i], reverse=True)[:n]
 
-    def search(self, dialog: Dialog, *, deadline: float | None = None) -> list[Hit]:
+    def search(self, dialog: Dialog, *, deadline: float | None = None, fast: bool = False) -> list[Hit]:
         last = dialog.last_user
         users = dialog.user_turns
 
@@ -633,7 +636,7 @@ class Retriever:
         if dialog.is_multi_turn:
             rankings.append((self._rank_bm25(context_query, 40), 0.7))
 
-        if self.vectors is not None and self.client and not _expired(deadline, 20):
+        if self.vectors is not None and self.client and not fast and not _expired(deadline, 20):
             try:
                 queries = [last] + ([context_query] if dialog.is_multi_turn else [])
                 qvecs = self.client.embed(queries)
@@ -652,10 +655,10 @@ class Retriever:
         candidates = order[: self.s.rerank_candidates]
         hits = [Hit(self.kb.chunks[i], fused[i], "rrf") for i in candidates]
 
-        if self.rerank_ok and self.client and self.s.llm_ready and len(hits) > 2 and not _expired(deadline, 25):
+        if self.rerank_ok and self.client and self.s.llm_ready and len(hits) > 2 and not fast and not _expired(deadline, 25):
             rq = last if not dialog.is_multi_turn else f"{last}\nКонтекст диалога: {context_query}"
             try:
-                ranked = self.client.rerank(rq, [h.chunk.for_embedding()[:2000] for h in hits], top_n=len(hits))
+                ranked = self.client.rerank(rq, [h.chunk.for_embedding()[:800] for h in hits], top_n=len(hits))
                 reranked = [Hit(hits[i].chunk, s, "rerank") for i, s in ranked]
 
                 top = reranked[: self.s.top_k]
@@ -696,21 +699,6 @@ SYSTEM_PROMPT = """Ты — ИИ-консультант МТС EnergyTool на �
 
 Примеры хороших ответов:
 
-Клиент: У нас крыша на два ската — восток и запад. Панели можно поставить на оба?
-Консультант: Да, при ориентации скатов на восток и запад можно использовать оба. Выработку мы рассчитываем с учётом региона, наклона и характеристик кровли. Подскажите, в каком регионе находится объект?
-
-Клиент: Можно сначала поставить солнечную станцию на 60 кВт, а потом расширить?
-Консультант: Да, станцию можно вводить поэтапно: начать с 60 кВт, а затем нарастить мощность. Возможность и параметры расширения лучше учесть уже при проектировании. У вас есть данные о дневном потреблении объекта?
-
-Клиент: В счётчиках стоят симки другого оператора. Для вашей платформы их надо менять?
-Консультант: Нет, менять SIM-карты только из-за оператора не обязательно. Наша платформа поддерживает передачу данных с приборов, использующих SIM-карты других операторов. Совместимость конкретных устройств и схемы сбора данных проверим отдельно. Какие у вас модели счётчиков?
-
-Клиент: Нам предлагают компенсировать реактивную энергию. Сначала надо что-то измерить?
-Консультант: Да, сначала нужно измерить параметры реактивной энергии и понять, есть ли избыточное потребление. Только после этого можно оценивать необходимость компенсирующих устройств. Без данных измерений рекомендовать конкретное оборудование было бы преждевременно.
-
-(диалог) Клиент: Мы электросетевая компания. Хотим лучше находить потери. … Клиент: Архив примерно за два года, по одним приборам почасовые данные, по другим суточные. Таких данных хватит, чтобы начать?
-Консультант: Да, двухлетнего архива достаточно по длительности: в наших материалах минимальная глубина — один год. Суточные данные подходят, если есть разбивка потребления на день и ночь; почасовые данные желательны для более точного анализа. Также потребуются обезличенные идентификаторы каналов учёта и сведения о приборах. Система сформирует список приоритетных проверок, но не установит факт хищения.
-
 (диалог) Клиент: Мы СНТ, у нас 120 участков, счётчики не у всех. … Консультант: Как сейчас собираете показания? Клиент: Сами садоводы присылают цифры в чат. Что нам подойдёт?
 Консультант: Вам подойдёт облачная платформа учёта: она ведёт учёт по каждому участку и местам общего пользования и позволяет дистанционно управлять нагрузкой. Показания с подключённых счётчиков собираются автоматически, без чатов и обходов. Сколько участков уже оснащены счётчиками и какие это модели?
 
@@ -718,10 +706,57 @@ SYSTEM_PROMPT = """Ты — ИИ-консультант МТС EnergyTool на �
 Консультант: Конечно, контакты не обязательны. Главный параметр — присоединённая мощность: ниже 750 кВт выход на оптовый рынок невозможен, а от 750 кВт до 20 МВт участие идёт через энергосбытовую компанию-посредника. Также важны месячный объём и профиль потребления. Какая присоединённая мощность указана у вас в документах?
 
 Клиент: Как настроить передачу данных со счётчика по RS-485?
-Консультант: Настройка конкретных приборов и интерфейсов — вне компетенции консультанта, в наших материалах таких инструкций нет. Могу передать вопрос специалисту, который разберёт вашу схему подключения. Какие модели счётчиков у вас установлены?
+Консультант: Настройка конкретных приборов и интерфейсов — вне компетенции консультанта, в наших материалах таких инструкций нет. Могу передать вопрос специалисту, который разберёт вашу схему подключения. Какие модели счётчиков у вас установлены?"""
 
-Клиент: Если расчёт покажет, что проект нам невыгоден, вы так и скажете?
-Консультант: Да, обязательно. Предварительная оценка экономического эффекта бесплатна и ни к чему вас не обязывает. Если расчёт покажет, что ожидаемая экономия недостаточна или проект не окупается, мы сообщим об этом, а не будем рекомендовать невыгодное решение."""
+
+class ExampleBank:
+    def __init__(self, pairs: Sequence[tuple[str, str]]):
+        self.pairs = list(pairs)
+        self.items = []
+        for q, _ in self.pairs:
+            d = parse_dialog(q)
+            text = f"{d.last_user} {d.last_user} " + " ".join(d.user_turns[:-1])
+            self.items.append(Chunk("", "", "", "", text, tokenize(text)))
+        self.bm25 = BM25(self.items) if self.items else None
+        self.keys = [normalize(q) for q, _ in self.pairs]
+
+    @classmethod
+    def load(cls) -> "ExampleBank":
+        try:
+            from examples import EXAMPLES
+        except ImportError:
+            EXAMPLES = []
+        return cls(EXAMPLES)
+
+    def pick(self, dialog: Dialog, k: int, exclude_exact: bool = False) -> list[tuple[str, str]]:
+        if not self.bm25 or k <= 0:
+            return []
+        query = f"{dialog.last_user} {dialog.last_user} " + " ".join(dialog.user_turns[:-1])
+        scores = self.bm25.scores(query)
+        key = normalize(" ".join(t for _, t in dialog.turns))
+        order = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+        out = []
+        for i in order:
+            if scores[i] <= 0:
+                break
+            if exclude_exact and (self.keys[i] == key or normalize(parse_dialog(self.pairs[i][0]).last_user) == normalize(dialog.last_user)):
+                continue
+            out.append(self.pairs[i])
+            if len(out) >= k:
+                break
+        return out
+
+
+def format_examples(pairs: Sequence[tuple[str, str]]) -> str:
+    blocks = []
+    for q, a in pairs:
+        d = parse_dialog(q)
+        if d.is_multi_turn:
+            q_text = "(диалог) " + " … ".join(f"{'Клиент' if r == 'user' else 'Консультант'}: {t}" for r, t in d.turns)
+        else:
+            q_text = f"Клиент: {d.last_user}"
+        blocks.append(f"{q_text}\nКонсультант: {a}")
+    return "\n\n".join(blocks)
 
 
 PRODUCT_DOC_RE = re.compile(r"(^|/)2[1-6]-[^/]+\.md$")
@@ -784,8 +819,14 @@ def _ask_block(kb: KnowledgeBase, hits: Sequence[Hit]) -> str:
     return "ЧТО УТОЧНЯТЬ У КЛИЕНТА (уточняющий вопрос выбирай отсюда, о самом важном недостающем параметре):\n" + "\n\n".join(parts)
 
 
-def build_messages(dialog: Dialog, context: str, guards: str, *, extra: str = "") -> list[dict]:
-    parts = [f"КОНТЕКСТ ИЗ БАЗЫ ЗНАНИЙ:\n{context or '(ничего релевантного не найдено)'}"]
+def build_messages(dialog: Dialog, context: str, guards: str, *, extra: str = "", examples: str = "") -> list[dict]:
+    parts = []
+    if examples:
+        parts.append(
+            "ПРИМЕРЫ ОТВЕТОВ НА ПОХОЖИЕ ВОПРОСЫ (ориентир по стилю, длине и уровню детализации; "
+            f"факты для ответа бери только из контекста ниже):\n{examples}"
+        )
+    parts.append(f"КОНТЕКСТ ИЗ БАЗЫ ЗНАНИЙ:\n{context or '(ничего релевантного не найдено)'}")
     if guards:
         parts.append(f"ПРАВИЛА ПРОДУКТА И ЧТО УТОЧНЯТЬ:\n{guards}")
     if dialog.is_multi_turn:
@@ -892,21 +933,23 @@ class Consultant:
         self.kb = KnowledgeBase.load(kb_path)
         self.client = ProxyClient(self.s) if self.s.llm_ready else None
         self.retriever = Retriever(self.kb, self.client, self.s, cache_dir=cache_dir)
+        self.examples = ExampleBank.load()
 
     @property
     def llm_ready(self) -> bool:
         return self.client is not None
 
-    def answer(self, dialog: Dialog, *, deadline: float | None = None, extra: str = "") -> Answer:
+    def answer(self, dialog: Dialog, *, deadline: float | None = None, extra: str = "", fast: bool = False) -> Answer:
         started = time.perf_counter()
         hits: list[Hit] = []
         try:
-            hits = self.retriever.search(dialog, deadline=deadline)
+            hits = self.retriever.search(dialog, deadline=deadline, fast=fast)
             if not self.client or _expired(deadline, 10):
                 text, mode, err = extractive_answer(dialog, hits), "extractive", ""
             else:
                 context, guards = build_context(self.kb, hits)
-                messages = build_messages(dialog, context, guards, extra=extra)
+                examples = format_examples(self.examples.pick(dialog, self.s.fewshot_k, self.s.fewshot_exclude_exact))
+                messages = build_messages(dialog, context, guards, extra=extra, examples=examples)
                 timeout, retries = None, None
                 if deadline is not None:
                     remaining = deadline - time.monotonic()
