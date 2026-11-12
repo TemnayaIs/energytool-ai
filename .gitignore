@@ -27,4 +27,4 @@ leaderboard/*.zip
 
 # Локальная оценка: результаты прогонов не коммитим
 eval/runs/
-eval/run_local.bat
+eval/queue/

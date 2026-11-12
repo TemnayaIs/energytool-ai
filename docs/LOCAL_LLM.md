@@ -45,7 +45,7 @@ TUN/fake-IP: выключите его на время скачивания. Б�
 ```env
 LLM_BASE_URL=http://127.0.0.1:8888/v1
 LLM_API_KEY=<ключ из Unsloth Studio>
-LLM_MODEL=Qwen3.8-27B-GGUF
+LLM_MODEL=unsloth/Qwen3.8-27B-GGUF
 LLM_TIMEOUT=180
 MAX_WORKERS=2
 USE_RERANKER=0
@@ -78,3 +78,10 @@ python eval/run_eval.py judge --a v02 --b v02_check                             
 
 Переключатели вариантов (`--set`): `SELF_CHECK=1`, `ENABLE_THINKING=1`, `TOP_K=12`,
 `USE_EMBEDDINGS=0/1`, `TEMPERATURE=0.3`.
+
+## 5. Очередь прогонов (раннер)
+
+`python eval/runner.py` — держите окно открытым. Раннер выполняет задания из `eval/queue/*.job`
+(одна строка аргументов `run_eval.py`, например `gen --name v03 --vs v02`), пишет лог в
+`eval/queue/<имя>.log`. Так прогоны можно ставить в очередь, не занимая терминал.
+Разрешены только подкоманды `gen`, `zip`, `judge`.

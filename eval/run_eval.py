@@ -104,8 +104,25 @@ def apply_overrides(pairs: list[str]) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
+def preflight() -> None:
+    """Один короткий запрос к модели: ошибки настройки видны сразу, а не после 18 вопросов."""
+    sys.path.insert(0, str(ROOT))
+    import energy_rag as er
+
+    settings = er.Settings.from_env()
+    if not settings.llm_ready:
+        raise SystemExit("LLM_BASE_URL/LLM_API_KEY не заданы (.env)")
+    client = er.ProxyClient(settings, retries=1)
+    try:
+        reply = client.chat([{"role": "user", "content": "Ответь одним словом: готов?"}], max_tokens=20)
+        print(f"Модель {settings.model}: OK ({reply[:40]!r})")
+    except Exception as error:  # noqa: BLE001
+        raise SystemExit(f"Модель {settings.model} недоступна: {error}")
+
+
 def cmd_gen(args) -> str:
     overrides = apply_overrides(args.set)
+    preflight()
     sys.path.insert(0, str(ROOT))
     import energy_rag as er  # импорт после применения переменных
 
@@ -151,6 +168,7 @@ def cmd_gen(args) -> str:
 def cmd_zip(args) -> str:
     """Запускает solution.py из ZIP-сабмита на тех же вопросах (как платформа)."""
     load_dotenv()
+    preflight()
     questions = read_csv([Path(p) for p in args.questions], "question")
     if args.limit:
         questions = dict(list(questions.items())[: args.limit])
