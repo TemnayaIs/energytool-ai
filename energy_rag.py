@@ -57,11 +57,12 @@ class Settings:
     enable_thinking: bool = False
     self_check: bool = False
     fewshot_k: int = 4
+    rerank_template: bool = True
     fewshot_exclude_exact: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
-        max_tokens = env_number("MAX_TOKENS", 700, 64, 8192)
+        max_tokens = env_number("MAX_TOKENS", 2048, 64, 8192)
         return cls(
             base_url=env("LLM_BASE_URL", "OPENAI_BASE_URL", "BASE_URL").rstrip("/"),
             api_key=env("LLM_API_KEY", "OPENAI_API_KEY"),
@@ -71,7 +72,8 @@ class Settings:
 
             temperature=env_number("ANSWER_TEMPERATURE", 0.0, 0.0, 1.0, float),  # для фактов нужна детерминированность
 
-            max_tokens=max(450, min(max_tokens, 1200)),
+            # если прокси проигнорирует отключение размышлений, они тоже съедают max_tokens
+            max_tokens=max(2048, min(max_tokens, 6000)),
             top_k=max(6, env_number("TOP_K", 8, 3, 16)),
             rerank_candidates=max(env_number("RERANK_CANDIDATES", 12, 4, 40), 8),
             timeout=float(env_number("LLM_TIMEOUT", 60, 10, 180)),
@@ -82,6 +84,7 @@ class Settings:
             enable_thinking=env_flag("ENABLE_THINKING", False),
             self_check=env_flag("SELF_CHECK", False),
             fewshot_k=env_number("FEWSHOT_K", 4, 0, 8),
+            rerank_template=env_flag("RERANK_TEMPLATE", True),
             fewshot_exclude_exact=env_flag("FEWSHOT_EXCLUDE_EXACT", False),
         )
 
@@ -410,6 +413,9 @@ class ProxyClient:
         return vectors
 
     def rerank(self, query: str, documents: Sequence[str], top_n: int) -> list[tuple[int, float]]:
+        if self.s.rerank_template:
+            query = RERANK_PREFIX + f"<Instruct>: {RERANK_INSTRUCTION}\n<Query>: {query}\n"
+            documents = [f"<Document>: {d}{RERANK_SUFFIX}" for d in documents]
         payload = {
             "model": self.s.reranker_model,
             "query": query,
@@ -445,6 +451,10 @@ class ProxyClient:
             "temperature": self.s.temperature if temperature is None else temperature,
             "max_tokens": (max_tokens or self.s.max_tokens) + (3000 if self.s.enable_thinking else 0),
         }
+        if not self.s.enable_thinking:
+            msgs = [dict(m) for m in messages]
+            msgs[-1]["content"] = msgs[-1]["content"].rstrip() + "\n/no_think"
+            payload["messages"] = messages = msgs
         sent_kwargs = self.no_think_kwargs
         if sent_kwargs:
             payload["chat_template_kwargs"] = {"enable_thinking": self.s.enable_thinking}
@@ -457,10 +467,6 @@ class ProxyClient:
                 with self._lock:
                     self.no_think_kwargs = False
                 payload.pop("chat_template_kwargs", None)
-                msgs = [dict(m) for m in messages]
-                if not self.s.enable_thinking:
-                    msgs[-1]["content"] = msgs[-1]["content"] + "\n/no_think"
-                payload["messages"] = msgs
                 data = self.post("/chat/completions", payload, timeout=timeout, retries=retries)
             else:
                 raise
@@ -473,8 +479,27 @@ class ProxyClient:
             content = str(content)
         content = strip_reasoning(content)
         if not content.strip():
-            raise LLMError("chat: пустой ответ (возможно, токены ушли на размышления)")
+            finish = (data["choices"][0].get("finish_reason") or "")
+            if finish == "length" and payload["max_tokens"] < 8000:
+                # модель всё-таки размышляла и не успела ответить: даём больше токенов один раз
+                payload["max_tokens"] = min(8000, payload["max_tokens"] * 3)
+                data = self.post("/chat/completions", payload, timeout=timeout, retries=retries)
+                content = strip_reasoning(str(data["choices"][0]["message"].get("content") or ""))
+            if not content.strip():
+                raise LLMError("chat: пустой ответ (возможно, токены ушли на размышления)")
         return content
+
+
+# формат запроса, рекомендованный для Qwen3-Reranker в /v1/rerank (документация vLLM)
+RERANK_PREFIX = (
+    "<|im_start|>system\nJudge whether the Document meets the requirements based on the Query and the "
+    'Instruct provided. Note that the answer can only be "yes" or "no".<|im_end|>\n<|im_start|>user\n'
+)
+RERANK_SUFFIX = "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+RERANK_INSTRUCTION = (
+    "Given a customer's question to an energy services consultant, retrieve knowledge base passages "
+    "that contain facts needed to answer it"
+)
 
 
 def _unit(vec: Sequence[float]) -> list[float]:
@@ -659,12 +684,12 @@ class Retriever:
             rq = last if not dialog.is_multi_turn else f"{last}\nКонтекст диалога: {context_query}"
             try:
                 ranked = self.client.rerank(rq, [h.chunk.for_embedding()[:800] for h in hits], top_n=len(hits))
-                reranked = [Hit(hits[i].chunk, s, "rerank") for i, s in ranked]
-
-                top = reranked[: self.s.top_k]
-                if hits[0].chunk.id not in {h.chunk.id for h in top}:
-                    top = top[:-1] + [hits[0]]
-                return top
+                # реранкер не заменяет порядок целиком, а голосует вместе с гибридным поиском
+                score = {i: 1.0 / (10 + i) for i in range(len(hits))}
+                for r, (i, _s) in enumerate(ranked):
+                    score[i] += 1.5 / (10 + r)
+                order = sorted(score, key=score.get, reverse=True)
+                return [Hit(hits[i].chunk, score[i], "rerank") for i in order[: self.s.top_k]]
             except Exception:
                 pass
         return hits[: self.s.top_k]
@@ -680,7 +705,7 @@ SYSTEM_PROMPT = """Ты — ИИ-консультант МТС EnergyTool на �
 1. Первое предложение — прямой ответ именно на заданный вопрос («Да, …», «Нет, …», «Да, но …», «Может иметь смысл, но …», «Начать стоит с …»). Не пересказывай вопрос и не здоровайся.
 2. Затем 1–2 предложения по существу: только те факты из базы знаний, которые нужны для ответа на этот вопрос, и главная оговорка (от чего зависит результат или что нужно проверить). Не перечисляй всё, что знаешь о продукте. Не называй цифры, которые не отвечают на вопрос (точность распознавания, число поддерживаемых приборов, проценты, сроки и т. п.), — их называй, только если клиент спросил именно об этом.
 3. В конце — один уточняющий вопрос о главном недостающем параметре для расчёта или подбора решения. Выбирай его из блока «ЧТО УТОЧНЯТЬ У КЛИЕНТА» (регион, присоединённая мощность, объём и профиль потребления, количество приборов и способ сбора показаний, ценовая категория, тип кровли и т. п.). Не спрашивай технические мелочи (тип индикатора, ориентацию стен, модель инвертора) и то, что клиент уже сообщил. Если вопрос справочный и полностью закрыт ответом, уточняющий вопрос не нужен.
-4. Объём — 2–4 предложения, обычно 35–70 слов. Обычный текст одним абзацем: без списков, заголовков, Markdown и ссылок на разделы базы.
+4. Объём — 2–4 предложения, обычно 30–60 слов. Обычный текст одним абзацем: без списков, заголовков, Markdown и ссылок на разделы базы.
 5. Говори от лица МТС EnergyTool («мы», «наша платформа»).
 
 Рассуждай как консультант, а не как поисковик:
@@ -839,7 +864,7 @@ def build_messages(dialog: Dialog, context: str, guards: str, *, extra: str = ""
     parts.append(
         "Ответь как консультант МТС EnergyTool: прямой ответ на заданный вопрос, 1–2 нужных факта из контекста, "
         "при необходимости один уточняющий вопрос о следующем шаге. Без догадок и лишних подробностей. "
-        "Обычный текст, 2–4 предложения, 35–70 слов."
+        "Обычный текст, 2–4 предложения, 30–60 слов."
     )
     return [
         {"role": "system", "content": SYSTEM_PROMPT},

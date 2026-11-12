@@ -32,6 +32,8 @@ async def chat(r: Request):
     if calls["chat"] % 7 == 0:
         return JSONResponse({"error": "rate"}, 429)
     user = j["messages"][-1]["content"]
+    if os.getenv("MOCK_THINK_EMPTY") == "1" and j.get("max_tokens", 0) < 5000:
+        return {"choices": [{"message": {"role": "assistant", "content": "<think>долго думаю"}, "finish_reason": "length"}]}
     if "ОЦЕНКА: <цифра>" in user:
         return {"choices": [{"message": {"role": "assistant", "content": f"Различие в полноте.\nОЦЕНКА: {random.randint(2, 5)}"}}]}
     q = user.split("ВОПРОС КЛИЕНТА:\n")[-1].split("ПОСЛЕДНЯЯ РЕПЛИКА КЛИЕНТА (ответь на неё с учётом истории):\n")[-1].split("\n")[0]
