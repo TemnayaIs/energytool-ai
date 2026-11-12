@@ -1,22 +1,4 @@
-"""Ядро ИИ-консультанта МТС EnergyTool: поиск по базе знаний и генерация ответа.
-
-Один модуль используют и конкурсный ``solution.py``, и веб-прототип ``app/``,
-поэтому качество ответов на лидерборде и в чате одинаковое.
-
-Пайплайн одного ответа:
-
-1. Разбор входа: последняя реплика клиента + история диалога.
-2. Гибридный поиск: BM25 (стемминг, синонимы) и плотные эмбеддинги BAAI/bge-m3,
-   отдельно по последней реплике и по всему контексту диалога; слияние RRF.
-3. Реранжирование кандидатов Qwen3 Reranker (если доступен).
-4. Сборка контекста: найденные разделы + «правила продукта» (разделы
-   «Факты, которые можно утверждать» / «Чего утверждать нельзя»)
-   для продуктов, попавших в выдачу.
-5. Генерация ответа консультанта (Qwen3, без «размышлений»), очистка разметки.
-6. Любой сбой сети -> безопасный экстрактивный ответ, а не падение.
-
-Зависимости: только ``httpx``. Секреты читаются из окружения и нигде не логируются.
-"""
+"""RAG для консультанта EnergyTool: база знаний, поиск, генерация ответа."""
 
 from __future__ import annotations
 
@@ -35,13 +17,8 @@ from typing import Iterable, Sequence
 
 import httpx
 
-# ---------------------------------------------------------------------------
-# Конфигурация
-# ---------------------------------------------------------------------------
-
 
 def env(*names: str, default: str = "") -> str:
-    """Первое непустое значение из списка переменных окружения."""
     for name in names:
         value = os.getenv(name, "").strip()
         if value and value != name:
@@ -75,10 +52,10 @@ class Settings:
     timeout: float = 60.0
     use_embeddings: bool = True
     use_reranker: bool = True
-    emb_base_url: str = ""  # отдельный сервер эмбеддингов (локальные тесты); пусто — общий прокси
+    emb_base_url: str = ""
     emb_api_key: str = ""
-    enable_thinking: bool = False  # режим размышлений Qwen3 (эксперимент)
-    self_check: bool = False  # второй вызов: сверка ответа с контекстом (эксперимент)
+    enable_thinking: bool = False
+    self_check: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -90,13 +67,11 @@ class Settings:
             model=env("LLM_MODEL", "OPENAI_MODEL", "GEN_MODEL", default="qwen/qwen3.8-27b"),
             emb_model=env("EMB_MODEL", default="BAAI/bge-m3"),
             reranker_model=env("RERANKER_MODEL", default="Qwen/Qwen3-Reranker-8B"),
-            # Консультанту нужна воспроизводимость: высокую температуру из
-            # конфигурации ограничиваем сверху.
-            temperature=min(temperature, 0.3),
-            # Ответ ~150 слов по-русски — это 300–450 токенов; оставляем запас,
-            # но не даём модели «расписаться».
+
+            temperature=min(temperature, 0.3),  # высокая температура портит факты
+
             max_tokens=max(450, min(max_tokens, 1200)),
-            top_k=max(6, env_number("TOP_K", 8, 3, 16)),  # слишком малый TOP_K режет нужные разделы
+            top_k=max(6, env_number("TOP_K", 8, 3, 16)),
             rerank_candidates=max(env_number("RERANKER_TOP_N", 24, 4, 40), 16),
             timeout=float(env_number("LLM_TIMEOUT", 60, 10, 180)),
             use_embeddings=env_flag("USE_EMBEDDINGS", True),
@@ -112,10 +87,6 @@ class Settings:
         return bool(self.base_url and self.api_key)
 
 
-# ---------------------------------------------------------------------------
-# Нормализация текста и BM25
-# ---------------------------------------------------------------------------
-
 WORD_RE = re.compile(r"[0-9a-zа-я]+", re.IGNORECASE)
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 
@@ -128,7 +99,8 @@ STOPWORDS = set(
     этом этот эту я вообще просто нужно нужен нужна хотим хочу у нас наш наша наше наши""".split()
 )
 
-# Бытовые формулировки клиента -> лексика базы знаний (до стемминга).
+
+# как говорят клиенты -> как написано в базе
 SYNONYMS: tuple[tuple[str, ...], ...] = (
     ("солнечная", "солнечные", "сэс", "панели", "фотоэлектрическая", "генерация", "станция"),
     ("счетчик", "счетчики", "прибор", "приборы", "учет", "аскуэ"),
@@ -198,17 +170,12 @@ def expand(tokens: Sequence[str]) -> list[str]:
     return out
 
 
-# ---------------------------------------------------------------------------
-# База знаний
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class Chunk:
     id: str
-    source: str  # путь файла внутри базы
-    title: str  # заголовок документа
-    heading: str  # путь заголовков раздела
+    source: str
+    title: str
+    heading: str
     text: str
     tokens: list[str] = field(default_factory=list)
 
@@ -241,7 +208,6 @@ def _iter_documents(path: Path) -> Iterable[tuple[str, str]]:
 
 
 def _clean_md(text: str) -> str:
-    # Pandoc-таблицы и разделители не несут смысла для модели.
     text = re.sub(r"(?m)^\s*-{3,}[\s-]*$", "", text)
     text = re.sub(r"`([^`]*)`", r"\1", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
@@ -256,7 +222,7 @@ def _sections(text: str) -> list[tuple[str, str]]:
     def flush() -> None:
         content = _clean_md("\n".join(body))
         if content:
-            # Заголовок документа (H1) хранится отдельно, в путь раздела не входит.
+
             path = " → ".join(t for lvl, t in stack if lvl > 1)
             sections.append((path, content))
         body.clear()
@@ -281,7 +247,7 @@ def _split(content: str, max_chars: int = 1600, overlap: int = 200) -> list[str]
     parts: list[str] = []
     current = ""
     for block in blocks:
-        while len(block) > max_chars:  # очень длинный абзац/таблица
+        while len(block) > max_chars:
             cut = block.rfind("\n", 0, max_chars)
             cut = cut if cut > max_chars // 2 else max_chars
             if current:
@@ -301,13 +267,14 @@ def _split(content: str, max_chars: int = 1600, overlap: int = 200) -> list[str]
     return parts
 
 
+# разделы с ограничениями по продукту, их всегда кладём в промпт
 GUARD_HEADINGS = ("факты, которые можно утверждать", "чего утверждать нельзя", "что мы не делаем")
 
 
 @dataclass
 class KnowledgeBase:
     chunks: list[Chunk]
-    guards: dict[str, str]  # source -> текст правил продукта
+    guards: dict[str, str]
     fingerprint: str
 
     @classmethod
@@ -350,10 +317,11 @@ class BM25:
         self.idf = {t: math.log(1 + (n - f + 0.5) / (f + 0.5)) for t, f in df.items()}
 
     def scores(self, query: str) -> list[float]:
+        # синонимы с половинным весом
         terms = tokenize(query)
         weights = Counter(terms)
         for t in expand(terms):
-            weights.setdefault(t, 0.5)  # синонимы весят меньше исходных слов
+            weights.setdefault(t, 0.5)
         out = []
         for tf, length in zip(self.tf, self.len):
             s = 0.0
@@ -366,18 +334,11 @@ class BM25:
         return out
 
 
-# ---------------------------------------------------------------------------
-# Клиент OpenAI-совместимого прокси
-# ---------------------------------------------------------------------------
-
-
 class LLMError(RuntimeError):
     pass
 
 
 class ProxyClient:
-    """Минимальный клиент с ограниченными повторами (429/5xx/таймауты)."""
-
     RETRYABLE = {408, 409, 425, 429, 500, 502, 503, 504}
 
     def __init__(self, settings: Settings, retries: int = 3):
@@ -387,7 +348,7 @@ class ProxyClient:
             timeout=httpx.Timeout(settings.timeout, connect=10.0),
             limits=httpx.Limits(max_connections=32, max_keepalive_connections=16),
         )
-        self.no_think_kwargs = True  # передавать chat_template_kwargs, пока прокси не отверг
+        self.no_think_kwargs = True  # сбросим, если прокси не знает chat_template_kwargs
         self._lock = threading.Lock()
 
     def close(self) -> None:
@@ -424,11 +385,9 @@ class ProxyClient:
             except (httpx.TimeoutException, httpx.TransportError) as e:
                 last = type(e).__name__
                 time.sleep(1.0 * (attempt + 1))
-            except ValueError as e:  # невалидный JSON
+            except ValueError as e:
                 last = f"bad json: {e}"
         raise LLMError(f"{endpoint}: {last}")
-
-    # --- эмбеддинги и реранкер ---------------------------------------------
 
     def embed(self, texts: Sequence[str], batch: int = 32) -> list[list[float]]:
         vectors: list[list[float]] = []
@@ -468,8 +427,6 @@ class ProxyClient:
         out.sort(key=lambda x: x[1], reverse=True)
         return out
 
-    # --- генерация -----------------------------------------------------------
-
     def chat(
         self,
         messages: list[dict],
@@ -491,8 +448,7 @@ class ProxyClient:
         try:
             data = self.post("/chat/completions", payload, timeout=timeout, retries=retries)
         except LLMError as e:
-            # Прокси может не знать chat_template_kwargs — повторяем без него
-            # и включаем «мягкий» выключатель размышлений Qwen3.
+
             status = str(e)[:8]
             if sent_kwargs and status.startswith("HTTP 4") and status not in ("HTTP 401", "HTTP 403"):
                 with self._lock:
@@ -528,17 +484,14 @@ def _dot(a: Sequence[float], b: Sequence[float]) -> float:
 
 
 def strip_reasoning(text: str) -> str:
+    # qwen3 может вернуть <think>...</think> прямо в content
     text = re.sub(r"(?is)<think>.*?</think>", "", text)
-    if "</think>" in text:  # открывающий тег съеден шаблоном
+    if "</think>" in text:
         text = text.split("</think>", 1)[1]
-    if "<think>" in text:  # размышление не закончилось — ответа нет
+    if "<think>" in text:
         text = text.split("<think>", 1)[0]
     return text.strip()
 
-
-# ---------------------------------------------------------------------------
-# Разбор диалога
-# ---------------------------------------------------------------------------
 
 TURN_RE = re.compile(
     r"^\s*(пользователь|клиент|user|ассистент|консультант|бот|assistant)\s*:\s*",
@@ -548,7 +501,7 @@ TURN_RE = re.compile(
 
 @dataclass
 class Dialog:
-    turns: list[tuple[str, str]]  # (role: user|assistant, text)
+    turns: list[tuple[str, str]]
 
     @property
     def last_user(self) -> str:
@@ -571,7 +524,6 @@ class Dialog:
 
 
 def parse_dialog(text: str) -> Dialog:
-    """Разбирает вопрос с встроенной историей «Пользователь: … Ассистент: …»."""
     text = text.replace("\r\n", "\n").strip()
     matches = list(TURN_RE.finditer(text))
     if not matches:
@@ -589,7 +541,7 @@ def parse_dialog(text: str) -> Dialog:
         turns.append((role, body))
     if not turns:
         return Dialog([("user", text)])
-    if turns[-1][0] != "user":  # последняя реплика должна быть клиента
+    if turns[-1][0] != "user":
         turns.append(("user", turns.pop()[1]))
     return Dialog(turns)
 
@@ -603,11 +555,6 @@ def dialog_from_messages(history: Sequence[dict], message: str) -> Dialog:
             turns.append((role, content))
     inner = parse_dialog(message)
     return Dialog(turns + inner.turns)
-
-
-# ---------------------------------------------------------------------------
-# Поиск
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -649,7 +596,7 @@ class Retriever:
                     cache.write_text(json.dumps(self.vectors))
                 except OSError:
                     pass
-        except Exception as e:  # noqa: BLE001 — эмбеддинги необязательны
+        except Exception as e:
             self.vectors = None
             self.dense_error = f"{type(e).__name__}: {e}"[:200]
 
@@ -668,14 +615,13 @@ class Retriever:
         return [i for i in order[:n] if scores[i] > 0]
 
     def _rank_dense(self, qvec: list[float], n: int) -> list[int]:
-        sims = [_dot(qvec, v) for v in self.vectors]  # type: ignore[union-attr]
+        sims = [_dot(qvec, v) for v in self.vectors]
         return sorted(range(len(sims)), key=lambda i: sims[i], reverse=True)[:n]
 
     def search(self, dialog: Dialog, *, deadline: float | None = None) -> list[Hit]:
         last = dialog.last_user
         users = dialog.user_turns
-        # Запрос по контексту: последняя реплика + предыдущие реплики клиента
-        # + последний вопрос консультанта (часто он задаёт тему ответа).
+
         context_parts = [last] + users[-3:-1][::-1]
         if dialog.is_multi_turn:
             prev_bot = next((t for r, t in reversed(dialog.turns[:-1]) if r == "assistant"), "")
@@ -694,9 +640,10 @@ class Retriever:
                 rankings.append((self._rank_dense(qvecs[0], 40), 1.3))
                 if len(qvecs) > 1:
                     rankings.append((self._rank_dense(qvecs[1], 40), 1.0))
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
 
+        # reciprocal rank fusion
         fused: dict[int, float] = defaultdict(float)
         for ranking, weight in rankings:
             for rank, idx in enumerate(ranking):
@@ -710,12 +657,12 @@ class Retriever:
             try:
                 ranked = self.client.rerank(rq, [h.chunk.for_embedding()[:2000] for h in hits], top_n=len(hits))
                 reranked = [Hit(hits[i].chunk, s, "rerank") for i, s in ranked]
-                # Сохраняем разнообразие: лучший результат RRF всегда остаётся в выдаче.
+
                 top = reranked[: self.s.top_k]
                 if hits[0].chunk.id not in {h.chunk.id for h in top}:
                     top = top[:-1] + [hits[0]]
                 return top
-            except Exception:  # noqa: BLE001 — реранкер необязателен
+            except Exception:
                 pass
         return hits[: self.s.top_k]
 
@@ -723,10 +670,6 @@ class Retriever:
 def _expired(deadline: float | None, reserve: float = 0.0) -> bool:
     return deadline is not None and time.monotonic() > deadline - reserve
 
-
-# ---------------------------------------------------------------------------
-# Промпт и генерация
-# ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = """Ты — ИИ-консультант МТС EnergyTool на сайте компании. К тебе приходят представители бизнеса, энергетики предприятий, председатели СНТ, сетевые организации и менеджеры МТС. Они пишут своими словами и часто не знают терминов.
 
@@ -785,7 +728,6 @@ PRODUCT_DOC_RE = re.compile(r"(^|/)2[1-6]-[^/]+\.md$")
 
 
 def build_context(kb: KnowledgeBase, hits: Sequence[Hit], max_chars: int = 11000, guard_chars: int = 5000) -> tuple[str, str]:
-    """Возвращает (контекст найденных разделов, правила продуктов из выдачи)."""
     blocks, used = [], 0
     for h in hits:
         block = f"[{h.chunk.label}]\n{h.chunk.text}"
@@ -794,7 +736,6 @@ def build_context(kb: KnowledgeBase, hits: Sequence[Hit], max_chars: int = 11000
         blocks.append(block)
         used += len(block)
 
-    # Правила берём для продуктов из верхней части выдачи (не более двух).
     products: list[str] = []
     for h in hits[:5]:
         src = h.chunk.source
@@ -815,7 +756,6 @@ def build_context(kb: KnowledgeBase, hits: Sequence[Hit], max_chars: int = 11000
     return "\n\n---\n\n".join(blocks), "\n\n---\n\n".join(guard_blocks)
 
 
-# Какие сведения уточнять у клиента: раздел базы «Какие сведения могут понадобиться».
 ASK_SECTIONS = {
     "21-orem": "Для анализа затрат и выхода на оптовый рынок",
     "11-price": "Для анализа затрат и выхода на оптовый рынок",
@@ -872,10 +812,10 @@ def clean_answer(text: str, max_words: int = 170) -> str:
     text = re.sub(r"^(?:Консультант|Ответ|Ассистент)\s*:\s*", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\*\*|__|^#+\s*", "", text, flags=re.MULTILINE)
     text = re.sub(r"(?m)^\s*(?:[-*•]|\d+[.)])\s+", "", text)
-    text = re.sub(r"\[(?:[^\]]*\.md[^\]]*)\]", "", text)  # ссылки на файлы базы
+    text = re.sub(r"\[(?:[^\]]*\.md[^\]]*)\]", "", text)
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     joined = []
-    for ln in lines:  # строки бывшего списка склеиваем в предложения
+    for ln in lines:
         if joined and not re.search(r"[.!?:;…]$", joined[-1]):
             joined[-1] += ";" if ln[:1].islower() else "."
         joined.append(ln)
@@ -890,7 +830,7 @@ def clean_answer(text: str, max_words: int = 170) -> str:
                 break
             kept.append(s)
             count += n
-        # Если отрезали финальный уточняющий вопрос — возвращаем его.
+
         if sentences and sentences[-1].endswith("?") and sentences[-1] not in kept and len(sentences[-1].split()) < 25:
             kept.append(sentences[-1])
         text = " ".join(kept)
@@ -905,13 +845,12 @@ NO_INFO = (
 
 
 def extractive_answer(dialog: Dialog, hits: Sequence[Hit]) -> str:
-    """Безопасный ответ без LLM: несколько предложений из лучшего раздела."""
     if not hits:
         return NO_INFO
     q = set(expand(tokenize(dialog.last_user)))
     scored = []
     for rank, h in enumerate(hits[:3]):
-        text = re.sub(r"\*\*([^*]+)\*\*\s*", "", h.chunk.text)  # жирные подзаголовки абзацев
+        text = re.sub(r"\*\*([^*]+)\*\*\s*", "", h.chunk.text)
         text = re.sub(r"\s+", " ", re.sub(r"(?m)^\s*[-*]\s+", "", text)).replace("--", "–")
         for s in re.split(r"(?<=[.!?])\s+", text):
             if 30 <= len(s) <= 400:
@@ -929,7 +868,7 @@ def extractive_answer(dialog: Dialog, hits: Sequence[Hit]) -> str:
 class Answer:
     text: str
     hits: list[Hit]
-    mode: str  # llm | extractive | error
+    mode: str
     latency_ms: int = 0
     error: str = ""
 
@@ -948,8 +887,6 @@ class Answer:
 
 
 class Consultant:
-    """Фасад: загрузить базу один раз, отвечать на вопросы потокобезопасно."""
-
     def __init__(self, kb_path: str | Path, settings: Settings | None = None, cache_dir: str | Path | None = None):
         self.s = settings or Settings.from_env()
         self.kb = KnowledgeBase.load(kb_path)
@@ -982,14 +919,13 @@ class Consultant:
                     if self.s.self_check and not _expired(deadline, 3 * self.s.timeout):
                         text = self._self_check(dialog, context, guards, text, timeout, retries)
                     mode, err = "llm", ""
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     text, mode, err = extractive_answer(dialog, hits), "extractive", f"{type(e).__name__}: {e}"[:300]
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             text, mode, err = NO_INFO, "error", f"{type(e).__name__}: {e}"[:300]
         return Answer(text or NO_INFO, hits, mode, round((time.perf_counter() - started) * 1000), err)
 
     def _self_check(self, dialog: Dialog, context: str, guards: str, draft: str, timeout, retries) -> str:
-        """Второй проход: убрать из черновика всё, что не подтверждено контекстом."""
         prompt = (
             f"КОНТЕКСТ ИЗ БАЗЫ ЗНАНИЙ:\n{context}\n\n"
             + (f"ПРАВИЛА ПРОДУКТА:\n{guards}\n\n" if guards else "")
@@ -1005,14 +941,13 @@ class Consultant:
         try:
             checked = clean_answer(self.client.chat(messages, timeout=timeout, retries=retries, temperature=0.0))
             return checked if len(checked.split()) >= 5 else draft
-        except Exception:  # noqa: BLE001
+        except Exception:
             return draft
 
     def complete(self, messages: list[dict], *, max_tokens: int = 600) -> str | None:
-        """Свободная генерация (например, резюме заявки). None — если LLM недоступна."""
         if not self.client:
             return None
         try:
             return strip_reasoning(self.client.chat(messages, max_tokens=max_tokens, temperature=0.1))
-        except Exception:  # noqa: BLE001
+        except Exception:
             return None

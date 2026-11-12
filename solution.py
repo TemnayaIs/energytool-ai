@@ -1,15 +1,4 @@
-"""МТС EnergyTool — конкурсный сабмит ИИ-консультанта.
-
-    DATA_DIR/questions.csv + DATA_DIR/knowledge-base.zip  ->  ./submission.csv
-
-Вся логика поиска и генерации — в energy_rag.py (тот же модуль использует
-веб-прототип). Здесь — только оркестрация: параллельная обработка, общий
-дедлайн (лимит платформы 20 минут), запись CSV строго по регламенту.
-
-Переменные окружения (подставляет платформа): LLM_BASE_URL / OPENAI_BASE_URL,
-LLM_API_KEY / OPENAI_API_KEY, LLM_MODEL / OPENAI_MODEL / GEN_MODEL, EMB_MODEL,
-RERANKER_MODEL, TEMPERATURE, MAX_TOKENS, MAX_WORKERS, TOP_K, DATA_DIR.
-"""
+"""Сабмит: DATA_DIR/questions.csv + knowledge-base.zip -> submission.csv"""
 
 from __future__ import annotations
 
@@ -22,7 +11,8 @@ from pathlib import Path
 from energy_rag import NO_INFO, Consultant, env, env_number, parse_dialog
 
 STARTED = time.monotonic()
-# Платформа обрывает запуск через 20 минут; оставляем запас на запись CSV.
+
+# у платформы лимит 20 минут, оставляем запас
 TIME_BUDGET = env_number("TIME_BUDGET_SEC", 1000, 120, 1150)
 DEADLINE = STARTED + TIME_BUDGET
 MAX_WORKERS = env_number("MAX_WORKERS", 8, 1, 32)
@@ -76,8 +66,8 @@ def main() -> None:
     kb_path = find_file("knowledge-base.zip", "knowledge_base.zip", "knowledge-base", "kb.zip")
     log(f"вопросов: {len(questions)}; база: {kb_path}")
 
-    # Заглушка на случай аварии: файл существует с первых секунд.
     answers: dict[str, str] = {qid: NO_INFO for qid, _ in questions}
+    # пишем заглушку сразу, чтобы файл был даже при падении
     write_submission([(qid, answers[qid]) for qid, _ in questions])
 
     bot = Consultant(kb_path, cache_dir="/tmp/energytool-cache")
@@ -103,7 +93,7 @@ def main() -> None:
             try:
                 qid, text = future.result()
                 answers[qid] = text
-            except Exception as error:  # noqa: BLE001 — один сбой не должен ронять сабмит
+            except Exception as error:
                 log(f"ошибка: {type(error).__name__}: {error}")
             if done % 20 == 0:
                 log(f"готово {done}/{len(questions)}")
