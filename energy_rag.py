@@ -444,7 +444,11 @@ class ProxyClient:
         temperature: float | None = None,
         timeout: float | None = None,
         retries: int | None = None,
+        no_think: bool = False,
     ) -> str:
+        if no_think:
+            # отстаём по времени: не даём модели тратить попытку на размышления
+            messages = _no_think(messages, self.s.enable_thinking)
         payload = {
             "model": self.s.model,
             "messages": messages,
@@ -988,7 +992,7 @@ class Consultant:
                     timeout = max(10.0, min(self.s.timeout, remaining - 5))
                     retries = 3 if remaining > 3 * self.s.timeout else 1
                 try:
-                    text = clean_answer(self.client.chat(messages, timeout=timeout, retries=retries))
+                    text = clean_answer(self.client.chat(messages, timeout=timeout, retries=retries, no_think=fast))
                     if len(text.split()) < 5:
                         raise LLMError("слишком короткий ответ")
                     if self.s.self_check and not _expired(deadline, 3 * self.s.timeout):
