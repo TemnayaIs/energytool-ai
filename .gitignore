@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+.env
+.env.*
+!.env.example
+
+data/app.db
+data/app.db-shm
+data/app.db-wal
+submission.csv
+submission.zip
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store
+Thumbs.db
+
+# Данные кейса: по условиям нельзя публиковать в открытых репозиториях
+data/knowledge-base/
+*.zip
+leaderboard/*.zip

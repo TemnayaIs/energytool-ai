@@ -1,0 +1,25 @@
+services:
+  energytool:
+    build: .
+    image: energytool-ai:latest
+    container_name: energytool-ai
+    ports:
+      - "8000:8000"
+    environment:
+      # Без ключей контейнер поднимается в локальном демо-режиме.
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-qwen/qwen3.8-27b}
+      RERANKER_MODEL: ${RERANKER_MODEL:-qwen/qwen3-reranker-8b}
+      TEMPERATURE: ${TEMPERATURE:-0.1}
+      MAX_TOKENS: ${MAX_TOKENS:-900}
+      TOP_K: ${TOP_K:-6}
+      RERANKER_TOP_N: ${RERANKER_TOP_N:-4}
+      USE_RERANKER: ${USE_RERANKER:-0}
+      DB_PATH: /app/storage/app.db
+    volumes:
+      - energytool-storage:/app/storage
+    restart: unless-stopped
+
+volumes:
+  energytool-storage:

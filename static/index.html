@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0b0d12" />
+  <meta name="description" content="ИИ-консультант МТС EnergyTool: подберёт решение по учёту, солнечной генерации, потерям и оптовому рынку и передаст заявку инженеру." />
+  <title>МТС EnergyTool — ИИ-консультант для сайта</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23E30611'/%3E%3Cpath d='M35 10 18 36h11l-2 18 19-28H34l1-16Z' fill='white'/%3E%3C/svg%3E" />
+</head>
+<body>
+  <svg class="svg-sprite" aria-hidden="true">
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2.5 13.8 9l6.2 1.8-6.2 1.9L12 19l-1.8-6.3L4 10.8 10.2 9 12 2.5Z" fill="currentColor"/><path d="m18.5 15 .9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9.9-2.6Z" fill="currentColor" opacity=".6"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="m4 11 16-7-5.5 16-3.2-6.1L4 11Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m11.3 13.9 3.4-3.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 2v2.2M12 19.8V22M2 12h2.2M19.8 12H22M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M19.1 4.9l-1.6 1.6M6.5 17.5l-1.6 1.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-meter" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M7.5 8h9M7.5 12h2.2M12 12h2.2M16.5 12h.1M7.5 16h2.2M12 16h2.2M16.5 16h.1" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8.5h3l1.4-2h7.2l1.4 2h3a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 20 19.5H4A1.5 1.5 0 0 1 2.5 18v-8A1.5 1.5 0 0 1 4 8.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="13.5" r="3.2" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+    <symbol id="i-market" viewBox="0 0 24 24"><path d="M3.5 20.5V13M9.2 20.5V8.5M14.9 20.5v-9M20.5 20.5V4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2.8 20 6v5.4c0 5-3.2 8.4-8 10-4.8-1.6-8-5-8-10V6l8-3.2Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m8.5 12 2.2 2.2 4.8-4.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-bug" viewBox="0 0 24 24"><path d="M8 9h8a3 3 0 0 1 3 3v3a7 7 0 0 1-14 0v-3a3 3 0 0 1 3-3Z" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9 9V7a3 3 0 0 1 6 0v2M3.5 13H7M17 13h3.5M4.5 8.5 7 10M19.5 8.5 17 10M4.5 18 7 16.5M19.5 18 17 16.5M12 9v10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M4 5.5v4h4M4.6 9.5A8 8 0 1 1 4 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8v4.5l3 1.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3.5h8l4 4v13H6v-17Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M14 3.5v4h4M9 12h6M9 15.5h6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.5 2 5 13.5h5.2L9 22l9-12h-5.3L13.5 2Z" fill="currentColor"/></symbol>
+  </svg>
+
+  <div class="noise" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="МТС EnergyTool — на главную">
+      <span class="brand-mark"><svg class="icon"><use href="#i-bolt"></use></svg></span>
+      <span class="brand-text"><b>МТС</b><span>EnergyTool</span></span>
+      <span class="brand-badge">AI</span>
+    </a>
+    <nav class="nav" aria-label="Основная навигация">
+      <a href="#products">Продукты</a>
+      <a href="#how">Как работает</a>
+      <a href="#why">Почему мы</a>
+      <a href="#chat" class="nav-chat-link">Демо-чат</a>
+    </nav>
+    <a class="btn btn-small btn-dark" href="#chat" data-focus-chat>Открыть чат <svg class="icon"><use href="#i-arrow"></use></svg></a>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-glow hero-glow-a" aria-hidden="true"></div>
+      <div class="hero-glow hero-glow-b" aria-hidden="true"></div>
+      <div class="hero-inner">
+        <div class="hero-copy">
+          <div class="eyebrow"><span class="eyebrow-dot"></span> MTS ENERGYTOOL · ИИ-КОНСУЛЬТАНТ</div>
+          <h1>Энергетическое решение, которое подходит <em>именно вам</em>.</h1>
+          <p class="hero-lead">
+            Опишите задачу своими словами — консультант разберётся в объекте, задаст точные вопросы
+            и подберёт продукт: учёт, солнечная станция, поиск потерь или выход на оптовый рынок.
+          </p>
+          <div class="hero-actions">
+            <button class="btn btn-primary" data-focus-chat>Начать консультацию <svg class="icon"><use href="#i-arrow"></use></svg></button>
+            <a class="btn btn-ghost" href="#products">Смотреть продукты</a>
+          </div>
+          <div class="hero-trust">
+            <span><svg class="icon"><use href="#i-check"></use></svg> Бесплатный расчёт</span>
+            <span><svg class="icon"><use href="#i-check"></use></svg> Без навязчивых звонков</span>
+            <span><svg class="icon"><use href="#i-check"></use></svg> Ответ за секунды</span>
+          </div>
+          <div class="hero-stats">
+            <div><b>90 000+</b><span>приборов учёта на платформе</span></div>
+            <div><b>300+</b><span>типов приборов и УСПД</span></div>
+            <div><b>5</b><span>направлений в одном диалоге</span></div>
+          </div>
+        </div>
+
+        <div class="hero-chat" id="chat">
+          <div class="chat-card" aria-label="Чат с ИИ-консультантом">
+            <div class="chat-head">
+              <div class="chat-identity">
+                <span class="ai-avatar"><svg class="icon"><use href="#i-spark"></use></svg><i class="pulse"></i></span>
+                <div>
+                  <strong>ИИ-консультант</strong>
+                  <span class="chat-status"><i></i> Онлайн · отвечает сразу</span>
+                </div>
+              </div>
+              <div class="chat-tools">
+                <button class="icon-btn" id="debugToggle" title="Режим отладки" aria-label="Режим отладки" aria-pressed="false"><svg class="icon"><use href="#i-bug"></use></svg></button>
+                <button class="icon-btn" id="historyToggle" title="История диалогов" aria-label="История диалогов"><svg class="icon"><use href="#i-history"></use></svg></button>
+                <button class="icon-btn" id="newDialog" title="Новый диалог" aria-label="Новый диалог"><svg class="icon"><use href="#i-plus"></use></svg></button>
+              </div>
+            </div>
+
+            <div class="debug-panel" id="debugPanel" hidden>
+              <div class="debug-row">
+                <span class="debug-label">Режим</span><span id="dbgMode" class="debug-value">—</span>
+                <span class="debug-label">Ответ</span><span id="dbgLatency" class="debug-value">—</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Тема</span><span id="dbgIntent" class="debug-value">—</span>
+              </div>
+              <div class="debug-row debug-slots-row">
+                <span class="debug-label">Слоты</span><span id="dbgSlots" class="debug-value">—</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Модель</span><span id="dbgModel" class="debug-value">—</span>
+              </div>
+            </div>
+
+            <div class="chat-body" id="chatBody" aria-live="polite">
+              <div class="chat-day">Сегодня</div>
+            </div>
+
+            <div class="chat-quick" id="quickReplies"></div>
+
+            <form class="chat-input" id="chatForm" autocomplete="off">
+              <textarea id="chatInput" rows="1" maxlength="4000" placeholder="Опишите задачу: например, «хотим снизить счёт за электричество»" aria-label="Сообщение"></textarea>
+              <button type="submit" class="send-btn" id="sendBtn" aria-label="Отправить сообщение"><svg class="icon"><use href="#i-send"></use></svg></button>
+            </form>
+            <div class="chat-hint">Enter — отправить · Shift + Enter — новая строка</div>
+
+            <div class="history-drawer" id="historyDrawer" hidden>
+              <div class="drawer-head">
+                <strong>История диалогов</strong>
+                <button class="icon-btn" id="historyClose" aria-label="Закрыть историю"><svg class="icon"><use href="#i-close"></use></svg></button>
+              </div>
+              <div class="drawer-list" id="historyList"></div>
+            </div>
+          </div>
+          <div class="chat-caption">
+            <span class="live-dot"></span> Демо работает без ключей. С подключённой LLM отвечает по базе знаний и показывает источники.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="ticker" aria-label="Показатели">
+      <div class="ticker-track">
+        <span>УЧЁТ ЭНЕРГОРЕСУРСОВ</span><i></i><span>СОЛНЕЧНАЯ ГЕНЕРАЦИЯ</span><i></i><span>ПОИСК ПОТЕРЬ</span><i></i><span>ОПТОВЫЙ РЫНОК</span><i></i><span>РАСПОЗНАВАНИЕ ПОКАЗАНИЙ</span><i></i>
+        <span>УЧЁТ ЭНЕРГОРЕСУРСОВ</span><i></i><span>СОЛНЕЧНАЯ ГЕНЕРАЦИЯ</span><i></i><span>ПОИСК ПОТЕРЬ</span><i></i><span>ОПТОВЫЙ РЫНОК</span><i></i><span>РАСПОЗНАВАНИЕ ПОКАЗАНИЙ</span><i></i>
+      </div>
+    </section>
+
+    <section class="section products" id="products">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow"><span class="eyebrow-dot"></span> ПРОДУКТЫ</div>
+          <h2>Пять направлений — один консультант</h2>
+        </div>
+        <p>Не нужно заранее знать, какой продукт вам нужен. Расскажите о задаче — консультант сам выйдет на подходящее решение.</p>
+      </div>
+      <div class="product-grid">
+        <article class="product-card" data-topic="Солнечная электростанция">
+          <div class="product-top"><span class="product-icon icon-sun"><svg class="icon"><use href="#i-sun"></use></svg></span><span class="product-num">01</span></div>
+          <h3>Солнечная электростанция</h3>
+          <p>Собственная генерация на кровле или участке: меньше платёж за электроэнергию, есть гибридный вариант с накопителями для резерва.</p>
+          <div class="product-tags"><span>15–500 кВт</span><span>под ключ</span><span>рассрочка до 5 лет</span></div>
+        </article>
+        <article class="product-card" data-topic="Облачная платформа учёта">
+          <div class="product-top"><span class="product-icon icon-meter"><svg class="icon"><use href="#i-meter"></use></svg></span><span class="product-num">02</span></div>
+          <h3>Облачная платформа учёта</h3>
+          <p>Приборы передают данные в облако МТС, а вы видите расход по цехам, объектам и арендаторам в одном кабинете.</p>
+          <div class="product-tags"><span>без минимума приборов</span><span>300+ типов</span><span>Профи / Лайт</span></div>
+        </article>
+        <article class="product-card" data-topic="Поиск коммерческих потерь">
+          <div class="product-top"><span class="product-icon icon-loss"><svg class="icon"><use href="#i-search"></use></svg></span><span class="product-num">03</span></div>
+          <h3>Поиск коммерческих потерь</h3>
+          <p>Аналитика находит приборы с подозрительным потреблением и формирует приоритетный список для выездных проверок.</p>
+          <div class="product-tags"><span>для сетевых компаний</span><span>вероятностная оценка</span></div>
+        </article>
+        <article class="product-card" data-topic="Распознавание показаний по фото">
+          <div class="product-top"><span class="product-icon icon-photo"><svg class="icon"><use href="#i-camera"></use></svg></span><span class="product-num">04</span></div>
+          <h3>Распознавание показаний по фото</h3>
+          <p>Абонент фотографирует счётчик, сервис считывает показания и передаёт их в систему организации. Без обходов и ручного ввода.</p>
+          <div class="product-tags"><span>электро и вода</span><span>точность 95%+</span><span>Telegram-бот</span></div>
+        </article>
+        <article class="product-card product-card-wide" data-topic="Выход на оптовый рынок">
+          <div class="product-top"><span class="product-icon icon-market"><svg class="icon"><use href="#i-market"></use></svg></span><span class="product-num">05</span></div>
+          <h3>Выход на оптовый рынок</h3>
+          <p>Сопровождение перехода с розничного рынка на оптовый: аудит учёта, интеллектуальная система, процедуры и прогноз потребления.</p>
+          <div class="product-tags"><span>от 750 кВт</span><span>экономия 5–15%</span><span>один подрядчик</span></div>
+        </article>
+        <article class="product-card product-card-accent" data-topic="Помогите выбрать решение">
+          <div class="product-top"><span class="product-icon"><svg class="icon"><use href="#i-spark"></use></svg></span></div>
+          <h3>Не знаете, что выбрать?</h3>
+          <p>Опишите ситуацию в двух предложениях. Консультант задаст пару вопросов и сам предложит направление.</p>
+          <button class="text-link" data-focus-chat>Спросить консультанта <svg class="icon"><use href="#i-arrow"></use></svg></button>
+        </article>
+      </div>
+    </section>
+
+    <section class="section how" id="how">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow"><span class="eyebrow-dot"></span> КАК ЭТО РАБОТАЕТ</div>
+          <h2>От задачи до заявки — четыре шага</h2>
+        </div>
+        <p>Консультант не имитирует поиск. Он ведёт диалог, опирается на базу знаний и передаёт менеджеру готовый контекст.</p>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <span class="step-num">01</span>
+          <h3>Опишите задачу</h3>
+          <p>Своими словами: вырос счёт, нужен учёт по цехам, ищете потери или думаете о солнечной станции.</p>
+        </div>
+        <div class="step">
+          <span class="step-num">02</span>
+          <h3>Уточним детали</h3>
+          <p>Мощность, регион, тип кровли, приборы, архив данных — только то, что действительно нужно для расчёта.</p>
+        </div>
+        <div class="step">
+          <span class="step-num">03</span>
+          <h3>Подберём решение</h3>
+          <p>Консультант объяснит продукт простым языком, назовёт ограничения и ориентиры, если они есть в базе.</p>
+        </div>
+        <div class="step">
+          <span class="step-num">04</span>
+          <h3>Передадим заявку</h3>
+          <p>Соберём ФИО, телефон и компанию, сформируем резюме диалога. Менеджер продолжит с готовым контекстом.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section why" id="why">
+      <div class="why-copy">
+        <div class="eyebrow"><span class="eyebrow-dot"></span> ПРИНЦИПЫ</div>
+        <h2>Энергетика без конфликта интересов</h2>
+        <p class="why-lead">
+          МТС не продаёт электроэнергию и не выступает энергосбытовой компанией.
+          Поэтому расчёт выгоды делается честно: если проект не окупается, мы говорим об этом до старта.
+        </p>
+        <a class="text-link" href="#chat" data-focus-chat>Проверить свою задачу <svg class="icon"><use href="#i-arrow"></use></svg></a>
+      </div>
+      <div class="why-list">
+        <div class="why-item">
+          <span class="why-icon"><svg class="icon"><use href="#i-shield"></use></svg></span>
+          <div><h3>Считаем до старта</h3><p>Экономический эффект оценивается до начала проекта. Отрицательный результат — нормальный исход, о нём сообщаем прямо.</p></div>
+        </div>
+        <div class="why-item">
+          <span class="why-icon"><svg class="icon"><use href="#i-meter"></use></svg></span>
+          <div><h3>Данные остаются у клиента</h3><p>Платформа не принадлежит энергосбытовой компании: смена поставщика не требует переустановки учёта.</p></div>
+        </div>
+        <div class="why-item">
+          <span class="why-icon"><svg class="icon"><use href="#i-doc"></use></svg></span>
+          <div><h3>Один подрядчик</h3><p>Приборы, монтаж, платформа и сопровождение — один договор и одна зона ответственности.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta">
+      <div class="cta-inner">
+        <div>
+          <div class="eyebrow eyebrow-light"><span class="eyebrow-dot"></span> БЕСПЛАТНАЯ ПРЕДВАРИТЕЛЬНАЯ ОЦЕНКА</div>
+          <h2>Не знаете, с чего начать?<br />Начните с разговора.</h2>
+        </div>
+        <div class="cta-side">
+          <p>Пять минут диалога — и у менеджера будет достаточно контекста, чтобы подготовить расчёт по вашему объекту.</p>
+          <button class="btn btn-light" data-focus-chat>Открыть консультанта <svg class="icon"><use href="#i-arrow"></use></svg></button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-top">
+      <a class="brand brand-footer" href="#top">
+        <span class="brand-mark"><svg class="icon"><use href="#i-bolt"></use></svg></span>
+        <span class="brand-text"><b>МТС</b><span>EnergyTool</span></span>
+      </a>
+      <div class="footer-links">
+        <a href="#products">Продукты</a>
+        <a href="#how">Как работает</a>
+        <a href="#why">Принципы</a>
+        <a href="#chat" data-focus-chat>Демо-чат</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>Прототип ИИ-консультанта для хакатона МТС True Tech Hack&amp;Change 2026.</span>
+      <span>Данные о продуктах — из предоставленной базы знаний. Не является публичной офертой.</span>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
