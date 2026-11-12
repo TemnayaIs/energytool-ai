@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY static ./static
 COPY data/knowledge-base ./data/knowledge-base
-COPY rag_core.py answers_core.py solution.py ./
+COPY energy_rag.py rag_core.py answers_core.py solution.py ./
 
 RUN mkdir -p /app/storage \
     && useradd --create-home --uid 10001 appuser \

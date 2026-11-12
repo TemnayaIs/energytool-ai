@@ -145,7 +145,7 @@
         const item = node("div", "source-item");
         const head = node("div", "source-head");
         head.appendChild(node("span", "", source.heading || source.title || source.file));
-        head.appendChild(node("span", "source-score", Number(source.score || 0).toFixed(2)));
+        head.appendChild(node("span", "source-score", Number(source.score || 0).toFixed(3)));
         item.appendChild(head);
         item.appendChild(node("div", "source-file", source.file || ""));
         if (source.excerpt) item.appendChild(node("div", "source-excerpt", source.excerpt));
@@ -426,7 +426,8 @@
     els.dbgSlots.textContent = entries.length
       ? entries.map(([key, value]) => `${key}=${Array.isArray(value) ? value.join("/") : value}`).join(" · ")
       : "пока не собраны";
-    els.dbgModel.textContent = debug.llm_model || "локальный BM25 + экстрактивный ответ";
+    const retrieval = debug.retrieval ? ` · поиск: ${debug.retrieval}` : "";
+    els.dbgModel.textContent = (debug.llm_model || "демо-режим без LLM") + retrieval;
   }
 
   function expandAllSources(open) {

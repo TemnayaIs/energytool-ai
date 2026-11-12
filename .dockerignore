@@ -22,5 +22,6 @@ _score_debug.py
 .ruff_cache/
 .DS_Store
 Thumbs.db
-README.md
-PRESENTATION.md
+tests/
+leaderboard/
+scripts/

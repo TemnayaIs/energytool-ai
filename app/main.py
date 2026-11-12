@@ -13,28 +13,28 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from rag_core import BM25Index, load_chunks, search, sources_payload
+from energy_rag import Consultant, dialog_from_messages
 
-from . import config, consultant, llm, store
+from . import config, consultant, store
+from .summary import build_summary
 from .schemas import ChatIn, LeadIn
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("energytool")
 
-KB_INDEX: BM25Index | None = None
-KB_CHUNKS = 0
+BOT: Consultant | None = None
 STARTED_AT = datetime.now(timezone.utc)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global KB_INDEX, KB_CHUNKS
+    global BOT
     store.init_db()
-    chunks = load_chunks(config.KB_PATH)
-    KB_INDEX = BM25Index(chunks)
-    KB_CHUNKS = len(chunks)
-    logger.info("База знаний загружена: %s фрагментов из %s", KB_CHUNKS, config.KB_PATH)
-    logger.info("Режим ответов: %s", "LLM " + config.LLM_MODEL if llm.llm_available() else "локальный демо-режим")
+    BOT = Consultant(config.KB_PATH, cache_dir=config.DB_PATH.parent)
+    logger.info("База знаний: %s фрагментов из %s; поиск: %s", len(BOT.kb.chunks), config.KB_PATH, BOT.retriever.mode)
+    if BOT.retriever.dense_error:
+        logger.warning("Эмбеддинги недоступны, работаем на BM25: %s", BOT.retriever.dense_error)
+    logger.info("Режим ответов: %s", "LLM " + BOT.s.model if BOT.llm_ready else "локальный демо-режим")
     yield
 
 
@@ -60,10 +60,11 @@ async def health():
     return {
         "status": "ok",
         "version": config.APP_VERSION,
-        "kb_chunks": KB_CHUNKS,
-        "llm_enabled": llm.llm_available(),
-        "llm_model": config.LLM_MODEL if llm.llm_available() else None,
-        "reranker_enabled": config.USE_RERANKER,
+        "kb_chunks": len(BOT.kb.chunks) if BOT else 0,
+        "llm_enabled": bool(BOT and BOT.llm_ready),
+        "llm_model": BOT.s.model if BOT and BOT.llm_ready else None,
+        "retrieval": BOT.retriever.mode if BOT else None,
+        "reranker_enabled": bool(BOT and "rerank" in BOT.retriever.mode),
         "started_at": STARTED_AT.isoformat(),
         "stats": store.stats(),
     }
@@ -90,7 +91,7 @@ async def session_detail(session_id: str):
 
 @app.post("/api/chat")
 async def chat(payload: ChatIn):
-    if KB_INDEX is None:
+    if BOT is None:
         raise HTTPException(status_code=503, detail="База знаний ещё загружается")
 
     session = store.get_session(payload.session_id) if payload.session_id else None
@@ -102,36 +103,23 @@ async def chat(payload: ChatIn):
     history = store.get_messages(session["id"])
 
     plan = consultant.plan_turn(payload.message, state)
+    dialog = dialog_from_messages(history, payload.message)
 
+    result = BOT.answer(dialog, extra=consultant.llm_hint(plan, state))
+    answer, mode = result.text, result.mode
     started = time.perf_counter()
-    results = search(KB_INDEX, plan.context, intent=plan.intent, top_k=config.TOP_K)
-    results = llm.rerank(plan.query, results)
+    if mode != "llm":
+        # Демо-режим без ключей (или сбой LLM): курируемые ответы + факты из базы.
+        local_results = [(hit.chunk, hit.score) for hit in result.hits]
+        answer = consultant.build_local_answer(payload.message, state, local_results, force_lead=plan.offer_lead)
+        mode = "local" if not BOT.llm_ready else "local-fallback"
 
-    answer: str | None = None
-    mode = "local"
-    if llm.llm_available():
-        answer = llm.generate_answer(
-            payload.message,
-            state,
-            history,
-            results,
-            offer_lead=plan.offer_lead,
-        )
-        mode = "llm" if answer else "local-fallback"
-
-    if not answer:
-        answer = consultant.build_local_answer(
-            payload.message,
-            state,
-            results,
-            force_lead=plan.offer_lead,
-        )
-
-    if plan.offer_lead and "заявк" not in answer.lower() and "форм" not in answer.lower():
-        answer = answer.rstrip() + "\n\nЗаполните короткую форму — передам заявку инженеру, он подготовит бесплатный расчёт."
+    if plan.offer_lead and not re.search(r"заявк|форм|контакт", answer, re.IGNORECASE):
+        answer = answer.rstrip() + "\n\nЕсли удобно, оставьте ФИО, телефон и название компании — передам заявку специалисту, он подготовит бесплатный расчёт."
 
     answer = re.sub(r"\n{3,}", "\n\n", answer).strip()
-    latency_ms = round((time.perf_counter() - started) * 1000)
+    latency_ms = result.latency_ms + round((time.perf_counter() - started) * 1000)
+    sources = result.sources(limit=6)
 
     if plan.question:
         asked = list(state.get("asked") or [])
@@ -164,7 +152,7 @@ async def chat(payload: ChatIn):
             "mode": mode,
             "latency_ms": latency_ms,
             "intent": plan.intent,
-            "sources": sources_payload(results, limit=5),
+            "sources": sources,
         },
     )
     store.save_state(session["id"], state, title=title)
@@ -173,7 +161,7 @@ async def chat(payload: ChatIn):
         "session_id": session["id"],
         "title": title,
         "answer": answer,
-        "sources": sources_payload(results, limit=5),
+        "sources": sources,
         "quick_replies": plan.quick_replies,
         "lead": {
             "offered": plan.offer_lead,
@@ -192,7 +180,9 @@ async def chat(payload: ChatIn):
             "product": plan.product,
             "turn": state.get("turn", 0),
             "slots": plan.slots,
-            "llm_model": config.LLM_MODEL if mode == "llm" else None,
+            "llm_model": BOT.s.model if mode == "llm" else None,
+            "retrieval": BOT.retriever.mode,
+            "error": result.error or None,
         },
     }
 
@@ -209,7 +199,7 @@ async def create_lead(payload: LeadIn):
 
     lead = {"name": payload.name, "phone": payload.phone, "company": payload.company}
     fallback = consultant.make_summary(state, lead, messages)
-    summary = llm.generate_summary(state, lead, messages, fallback)
+    summary = build_summary(BOT, state, lead, messages, fallback)
 
     lead_id = store.add_lead(payload.session_id, payload.name, payload.phone, payload.company, summary)
 

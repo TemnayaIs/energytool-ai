@@ -698,3 +698,23 @@ def make_summary(state: dict, lead: dict, messages: Sequence[dict]) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def llm_hint(plan: "TurnPlan", state: dict) -> str:
+    """Подсказка для LLM о состоянии диалога: что известно и уместна ли заявка."""
+    from .summary import slots_summary
+
+    lines = []
+    known = slots_summary(state)
+    if known:
+        lines.append(f"Уже известно о клиенте (не переспрашивай): {known}.")
+    if state.get("lead_done"):
+        lines.append("Клиент уже оставил заявку — не предлагай её повторно.")
+    elif plan.offer_lead:
+        lines.append(
+            "Сейчас уместно мягко предложить оставить заявку: ФИО, телефон и название компании — "
+            "специалист подготовит бесплатную предварительную оценку. Если клиент не готов, не настаивай."
+        )
+    elif plan.question:
+        lines.append(f"Если в ответе нужен уточняющий вопрос, подходящий вариант: «{plan.question}»")
+    return "СОСТОЯНИЕ ДИАЛОГА:\n" + "\n".join(lines) if lines else ""

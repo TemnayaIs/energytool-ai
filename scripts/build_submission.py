@@ -3,7 +3,7 @@
 
 В корне архива должны лежать solution.py, requirements.txt и при необходимости
 дополнительные .py-модули. Вложенные папки платформа не переносит, поэтому
-rag_core.py и answers_core.py кладутся рядом с solution.py.
+energy_rag.py кладётся рядом с solution.py.
 
 Запуск из корня проекта:
     python scripts/build_submission.py
@@ -20,8 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # в сабмит кладём минимальный requirements-solution.txt под именем requirements.txt.
 FILES = {
     "solution.py": "solution.py",
-    "answers_core.py": "answers_core.py",
-    "rag_core.py": "rag_core.py",
+    "energy_rag.py": "energy_rag.py",
     "requirements-solution.txt": "requirements.txt",
 }
 OUTPUT = ROOT / "submission.zip"
