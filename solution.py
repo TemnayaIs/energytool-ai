@@ -13,7 +13,7 @@ from energy_rag import NO_INFO, Consultant, env, env_number, parse_dialog
 STARTED = time.monotonic()
 
 # у платформы лимит 20 минут, оставляем запас
-TIME_BUDGET = env_number("TIME_BUDGET_SEC", 1080, 120, 1150)
+TIME_BUDGET = env_number("TIME_BUDGET_SEC", 1000, 120, 1150)
 DEADLINE = STARTED + TIME_BUDGET
 MAX_WORKERS = env_number("MAX_WORKERS", 8, 1, 32)
 
