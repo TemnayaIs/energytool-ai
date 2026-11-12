@@ -58,6 +58,7 @@ class Settings:
     self_check: bool = False
     fewshot_k: int = 4
     rerank_template: bool = True
+    think_on_numbers: bool = True
     fewshot_exclude_exact: bool = False
 
     @classmethod
@@ -85,6 +86,7 @@ class Settings:
             self_check=env_flag("SELF_CHECK", False),
             fewshot_k=env_number("FEWSHOT_K", 4, 0, 8),
             rerank_template=env_flag("RERANK_TEMPLATE", True),
+            think_on_numbers=env_flag("THINK_ON_NUMBERS", True),
             fewshot_exclude_exact=env_flag("FEWSHOT_EXCLUDE_EXACT", False),
         )
 
@@ -445,19 +447,23 @@ class ProxyClient:
         timeout: float | None = None,
         retries: int | None = None,
         no_think: bool = False,
+        think: bool | None = None,
     ) -> str:
+        thinking = self.s.enable_thinking if think is None else think
         if no_think:
+            thinking = False
             # отстаём по времени: не даём модели тратить попытку на размышления
-            messages = _no_think(messages, self.s.enable_thinking)
+            messages = _no_think(messages, thinking)
         payload = {
             "model": self.s.model,
             "messages": messages,
-            "temperature": self.s.temperature if temperature is None else temperature,
-            "max_tokens": (max_tokens or self.s.max_tokens) + (3000 if self.s.enable_thinking else 0),
+            # для режима размышлений qwen3 не рекомендует жадный выбор токенов
+            "temperature": (0.6 if thinking else self.s.temperature) if temperature is None else temperature,
+            "max_tokens": (max_tokens or self.s.max_tokens) + (4000 if thinking else 0),
         }
         sent_kwargs = self.no_think_kwargs
         if sent_kwargs:
-            payload["chat_template_kwargs"] = {"enable_thinking": self.s.enable_thinking}
+            payload["chat_template_kwargs"] = {"enable_thinking": thinking}
         try:
             data = self.post("/chat/completions", payload, timeout=timeout, retries=retries)
         except LLMError as e:
@@ -467,7 +473,7 @@ class ProxyClient:
                 with self._lock:
                     self.no_think_kwargs = False
                 payload.pop("chat_template_kwargs", None)
-                payload["messages"] = _no_think(messages, self.s.enable_thinking)
+                payload["messages"] = _no_think(messages, thinking)
                 data = self.post("/chat/completions", payload, timeout=timeout, retries=retries)
             else:
                 raise
@@ -484,7 +490,7 @@ class ProxyClient:
             if finish == "length" and payload["max_tokens"] < 8000:
                 # модель всё-таки размышляла и не успела ответить: даём больше токенов один раз
                 payload["max_tokens"] = min(8000, payload["max_tokens"] * 3)
-                payload["messages"] = _no_think(messages, self.s.enable_thinking)
+                payload["messages"] = _no_think(messages, thinking)
                 data = self.post("/chat/completions", payload, timeout=timeout, retries=retries)
                 content = strip_reasoning(str(data["choices"][0]["message"].get("content") or ""))
             if not content.strip():
@@ -714,12 +720,13 @@ SYSTEM_PROMPT = """Ты — ИИ-консультант МТС EnergyTool на �
 
 Как ты отвечаешь:
 1. Первое предложение — прямой ответ именно на заданный вопрос («Да, …», «Нет, …», «Да, но …», «Может иметь смысл, но …», «Начать стоит с …»). Не пересказывай вопрос и не здоровайся.
-2. Затем 1–2 предложения по существу: только те факты из базы знаний, которые нужны для ответа на этот вопрос, и главная оговорка (от чего зависит результат или что нужно проверить). Не перечисляй всё, что знаешь о продукте. Не называй цифры, которые не отвечают на вопрос (точность распознавания, число поддерживаемых приборов, проценты, сроки и т. п.), — их называй, только если клиент спросил именно об этом.
+2. Затем 1–2 предложения по существу: только те факты из базы знаний, которые прямо отвечают на этот вопрос, и главная оговорка (от чего зависит результат или что нужно проверить). Одна мысль на вопрос: не добавляй соседние факты о продукте, о которых не спрашивали, — как передаются фото, точность распознавания, совместимость с другим оборудованием, сроки, цены, другие продукты. Лишние сведения ухудшают ответ, даже если они верны.
 3. В конце — один уточняющий вопрос о главном недостающем параметре для расчёта или подбора решения. Выбирай его из блока «ЧТО УТОЧНЯТЬ У КЛИЕНТА» (регион, присоединённая мощность, объём и профиль потребления, количество приборов и способ сбора показаний, ценовая категория, тип кровли и т. п.). Не спрашивай технические мелочи (тип индикатора, ориентацию стен, модель инвертора) и то, что клиент уже сообщил. Если вопрос справочный и полностью закрыт ответом, уточняющий вопрос не нужен.
 4. Объём — 2–4 предложения, обычно 35–70 слов. Обычный текст одним абзацем: без списков, заголовков, Markdown и ссылок на разделы базы.
 5. Говори от лица МТС EnergyTool («мы», «наша платформа»).
 
 Рассуждай как консультант, а не как поисковик:
+- Если клиент называет свои числа (мощность, потребление, площадь, срок), сначала сравни их с порогами из контекста — больше или меньше — и только потом делай вывод. Например, 700 кВт больше порога 670 кВт, но меньше порога 750 кВт.
 - Свяжи факты базы с ситуацией клиента из диалога. Например, сетевая солнечная станция вырабатывает энергию днём и без накопителей не переносит её на вечер — значит, при вечернем потреблении эффект ниже и стоит сравнить с гибридной станцией.
 - Не строй догадок о причинах ситуации клиента («скорее всего, у вас …»). Вместо этого скажи, от чего это может зависеть и что сравнить или проверить.
 - Если в диалоге клиент уже ответил на вопрос консультанта, используй это и двигайся дальше.
@@ -743,6 +750,14 @@ SYSTEM_PROMPT = """Ты — ИИ-консультант МТС EnergyTool на �
 
 Клиент: Как настроить передачу данных со счётчика по RS-485?
 Консультант: Настройка конкретных приборов и интерфейсов — вне компетенции консультанта, в наших материалах таких инструкций нет. Могу передать вопрос специалисту, который разберёт вашу схему подключения. Какие модели счётчиков у вас установлены?"""
+
+
+NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)?\s*(?:квт|мвт|кв\b|вт\b|%|процент|млн|тыс|кв\.?\s*м|м2|лет|год|мес)", re.IGNORECASE)
+
+
+def needs_reasoning(dialog: Dialog) -> bool:
+    # клиент назвал свои числа: модель должна сравнить их с порогами из базы, тут помогают размышления
+    return any(NUMBER_RE.search(t) for t in dialog.user_turns)
 
 
 class ExampleBank:
@@ -992,7 +1007,10 @@ class Consultant:
                     timeout = max(10.0, min(self.s.timeout, remaining - 5))
                     retries = 3 if remaining > 3 * self.s.timeout else 1
                 try:
-                    text = clean_answer(self.client.chat(messages, timeout=timeout, retries=retries, no_think=fast))
+                    think = True if (self.s.think_on_numbers and needs_reasoning(dialog)) else None
+                    text = clean_answer(
+                        self.client.chat(messages, timeout=timeout, retries=retries, no_think=fast, think=think)
+                    )
                     if len(text.split()) < 5:
                         raise LLMError("слишком короткий ответ")
                     if self.s.self_check and not _expired(deadline, 3 * self.s.timeout):
