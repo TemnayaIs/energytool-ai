@@ -181,3 +181,45 @@ data/knowledge-base/     база знаний кейса
   внешнее хранилище сессий.
 - Развитие: выгрузка заявок в CRM, авторизация менеджера, A/B-оценка ответов на реальных
   диалогах, автоматическая проверка ответов на запрещённые утверждения.
+
+
+---
+
+## История сабмитов на платформе (13.11.2026)
+
+| Время | Версия | Скор | Время выполнения | Ключевые настройки |
+|---|---|---|---|---|
+| 13:11 | v6b-tuned | 0.57266 | 667.8 с | FEWSHOT_K=3, TOP_K=6, контекст 9000, RERANK_CANDIDATES=12, thinking=0 |
+| 13:51 | v6b-think | 0.60444 | 543.9 с | v6b-tuned + RERANK_CANDIDATES=24 + ENABLE_THINKING=1 |
+| 14:24 | v6b-base-think | **0.64729** | 439.4 с | База v6b (FEWSHOT_K=4, TOP_K=8, контекст 11000, RC=12) + ENABLE_THINKING=1 |
+
+**Лучший результат:** 0.64729 (15-е место из 92 на 13.11).
+
+### Важные выводы
+
+- Reasoning (`ENABLE_THINKING=1`) дал основной прирост: +0.043 к базе v6b.
+- Тюнинг (FEWSHOT_K=3, TOP_K=6, контекст 9000) сам по себе ухудшал результат (0.57266 против 0.58626), поэтому финальная версия использует базу v6b + только reasoning.
+- Время выполнения reasoning-версии даже меньше (439 с против 544–668 с), запас до лимита 20 мин есть.
+
+### Следующие эксперименты (по одному фактору)
+
+1. `SELF_CHECK=1` — самопроверка ответа LLM-ом (уже собран в `submission.zip`).
+2. `RERANK_CANDIDATES=24` — больше кандидатов для reranker на базе v6b+reasoning.
+3. Увеличение `TOP_K` / `RERANKER_TOP_N` — если retrieval-гипотезы подтвердятся.
+
+## Тесты и проверки
+
+- `tests/smoke_solution.py` — запуск `solution.py` через mock-прокси (`tests/mock_proxy.py`), проверка формата `submission.csv`.
+- Прогоны: **300/300** и **1000/1000** ответов, режим `llm`, без ошибок (~13 с и ~39 с на mock-LLM).
+- Тестовые наборы: `tests/questions_300.csv`, `tests/questions_1000.csv` (циклические вариации `eval/extra_questions.csv`).
+- Сборка архива: `python scripts/build_submission.py` -> `submission.zip` (solution.py, energy_rag.py, examples.py, requirements.txt).
+
+## Файлы в leaderboard/
+
+| Файл | Скор | Настройки |
+|---|---|---|
+| `submission_v6b_0.58626.zip` | 0.58626 | База v6b (FEWSHOT_K=4, TOP_K=8, контекст 11000, RC=12) |
+| `submission_v6b-tuned_0.57266.zip` | 0.57266 | FEWSHOT_K=3, TOP_K=6, контекст 9000, RC=12 |
+| `submission_v6b-think_0.60444.zip` | 0.60444 | Тюнинг + RC=24 + reasoning |
+| `submission_v6b-base-think_0.64729.zip` | **0.64729** | База v6b + reasoning (лучшая) |
+| `submission_v6b-selfcheck_pending.zip` | — | База v6b + reasoning + SELF_CHECK=1 (на проверке) |
