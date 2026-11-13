@@ -56,7 +56,7 @@ class Settings:
     emb_api_key: str = ""
     enable_thinking: bool = False
     self_check: bool = False
-    fewshot_k: int = 3
+    fewshot_k: int = 6
     rerank_template: bool = True
     fewshot_exclude_exact: bool = False
 
@@ -83,7 +83,7 @@ class Settings:
             emb_api_key=env("EMB_API_KEY"),
             enable_thinking=env_flag("ENABLE_THINKING", True),
             self_check=env_flag("SELF_CHECK", False),
-            fewshot_k=env_number("FEWSHOT_K", 4, 0, 8),
+            fewshot_k=env_number("FEWSHOT_K", 6, 0, 8),
             rerank_template=env_flag("RERANK_TEMPLATE", True),
             fewshot_exclude_exact=env_flag("FEWSHOT_EXCLUDE_EXACT", False),
         )
