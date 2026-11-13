@@ -63,6 +63,7 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         max_tokens = env_number("MAX_TOKENS", 2048, 64, 8192)
+        thinking = env_flag("ENABLE_THINKING", True)
         return cls(
             base_url=env("LLM_BASE_URL", "OPENAI_BASE_URL", "BASE_URL").rstrip("/"),
             api_key=env("LLM_API_KEY", "OPENAI_API_KEY"),
@@ -70,7 +71,7 @@ class Settings:
             emb_model=env("EMB_MODEL", default="BAAI/bge-m3"),
             reranker_model=env("RERANKER_MODEL", default="Qwen/Qwen3-Reranker-8B"),
 
-            temperature=env_number("ANSWER_TEMPERATURE", 0.0, 0.0, 1.0, float),  # для фактов нужна детерминированность
+            temperature=env_number("ANSWER_TEMPERATURE", 0.6 if thinking else 0.0, 0.0, 1.0, float),  # для фактов нужна детерминированность
 
             # если прокси проигнорирует отключение размышлений, они тоже съедают max_tokens
             max_tokens=max(2048, min(max_tokens, 6000)),
@@ -81,7 +82,7 @@ class Settings:
             use_reranker=env_flag("USE_RERANKER", True),
             emb_base_url=env("EMB_BASE_URL").rstrip("/"),
             emb_api_key=env("EMB_API_KEY"),
-            enable_thinking=env_flag("ENABLE_THINKING", True),
+            enable_thinking=thinking,
             self_check=env_flag("SELF_CHECK", False),
             fewshot_k=env_number("FEWSHOT_K", 4, 0, 8),
             rerank_template=env_flag("RERANK_TEMPLATE", True),
@@ -444,16 +445,20 @@ class ProxyClient:
         temperature: float | None = None,
         timeout: float | None = None,
         retries: int | None = None,
+        think: bool | None = None,
     ) -> str:
+        thinking = self.s.enable_thinking if think is None else (think and self.s.enable_thinking)
+        if temperature is None:
+            temperature = self.s.temperature if thinking else min(self.s.temperature, 0.1)
         payload = {
             "model": self.s.model,
             "messages": messages,
-            "temperature": self.s.temperature if temperature is None else temperature,
-            "max_tokens": (max_tokens or self.s.max_tokens) + (3000 if self.s.enable_thinking else 0),
+            "temperature": temperature,
+            "max_tokens": (max_tokens or self.s.max_tokens) + (4000 if thinking else 0),
         }
         sent_kwargs = self.no_think_kwargs
         if sent_kwargs:
-            payload["chat_template_kwargs"] = {"enable_thinking": self.s.enable_thinking}
+            payload["chat_template_kwargs"] = {"enable_thinking": thinking}
         try:
             data = self.post("/chat/completions", payload, timeout=timeout, retries=retries)
         except LLMError as e:
@@ -463,7 +468,7 @@ class ProxyClient:
                 with self._lock:
                     self.no_think_kwargs = False
                 payload.pop("chat_template_kwargs", None)
-                payload["messages"] = _no_think(messages, self.s.enable_thinking)
+                payload["messages"] = _no_think(messages, thinking)
                 data = self.post("/chat/completions", payload, timeout=timeout, retries=retries)
             else:
                 raise
@@ -480,7 +485,7 @@ class ProxyClient:
             if finish == "length" and payload["max_tokens"] < 8000:
                 # модель всё-таки размышляла и не успела ответить: даём больше токенов один раз
                 payload["max_tokens"] = min(8000, payload["max_tokens"] * 3)
-                payload["messages"] = _no_think(messages, self.s.enable_thinking)
+                payload["messages"] = _no_think(messages, thinking)
                 data = self.post("/chat/completions", payload, timeout=timeout, retries=retries)
                 content = strip_reasoning(str(data["choices"][0]["message"].get("content") or ""))
             if not content.strip():
@@ -988,7 +993,7 @@ class Consultant:
                     timeout = max(10.0, min(self.s.timeout, remaining - 5))
                     retries = 3 if remaining > 3 * self.s.timeout else 1
                 try:
-                    text = clean_answer(self.client.chat(messages, timeout=timeout, retries=retries))
+                    text = clean_answer(self.client.chat(messages, timeout=timeout, retries=retries, think=not fast))
                     if len(text.split()) < 5:
                         raise LLMError("слишком короткий ответ")
                     if self.s.self_check and not _expired(deadline, 3 * self.s.timeout):
