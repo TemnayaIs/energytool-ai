@@ -74,8 +74,8 @@ class Settings:
 
             # если прокси проигнорирует отключение размышлений, они тоже съедают max_tokens
             max_tokens=max(2048, min(max_tokens, 6000)),
-            top_k=max(6, env_number("TOP_K", 6, 3, 16)),
-            rerank_candidates=max(env_number("RERANK_CANDIDATES", 24, 4, 40), 8),
+            top_k=max(6, env_number("TOP_K", 8, 3, 16)),
+            rerank_candidates=max(env_number("RERANK_CANDIDATES", 12, 4, 40), 8),
             timeout=float(env_number("LLM_TIMEOUT", 60, 10, 180)),
             use_embeddings=env_flag("USE_EMBEDDINGS", True),
             use_reranker=env_flag("USE_RERANKER", True),
@@ -83,7 +83,7 @@ class Settings:
             emb_api_key=env("EMB_API_KEY"),
             enable_thinking=env_flag("ENABLE_THINKING", True),
             self_check=env_flag("SELF_CHECK", False),
-            fewshot_k=env_number("FEWSHOT_K", 3, 0, 8),
+            fewshot_k=env_number("FEWSHOT_K", 4, 0, 8),
             rerank_template=env_flag("RERANK_TEMPLATE", True),
             fewshot_exclude_exact=env_flag("FEWSHOT_EXCLUDE_EXACT", False),
         )
@@ -794,7 +794,7 @@ def format_examples(pairs: Sequence[tuple[str, str]]) -> str:
 PRODUCT_DOC_RE = re.compile(r"(^|/)2[1-6]-[^/]+\.md$")
 
 
-def build_context(kb: KnowledgeBase, hits: Sequence[Hit], max_chars: int = 9000, guard_chars: int = 3000) -> tuple[str, str]:
+def build_context(kb: KnowledgeBase, hits: Sequence[Hit], max_chars: int = 11000, guard_chars: int = 5000) -> tuple[str, str]:
     blocks, used = [], 0
     for h in hits:
         block = f"[{h.chunk.label}]\n{h.chunk.text}"
