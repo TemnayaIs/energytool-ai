@@ -17,6 +17,7 @@
 | 13.11 13:11 | v6b-tuned | 0.57266 | 667.8 с | Консервативная настройка: FEWSHOT_K=3, TOP_K=6, контекст 9000, T=0.0 (smoke 1000/1000 OK) |
 | 13.11 13:51 | v6b-think | **0.60444** | 543.9 с | RERANK_CANDIDATES=24 + ENABLE_THINKING=1 (reasoning Qwen3) |
 | 13.11 14:24 | v6b-base-think | **0.64729** | 439.4 с | База v6b (FEWSHOT_K=4, TOP_K=8, контекст 11000, RC=12) + только ENABLE_THINKING=1 |
+| 13.11 15:32 | v6b-base-think-selfcheck | 0.60889 | 1023.9 с | База v6b + reasoning + SELF_CHECK=1. Хуже: самопроверка меняет стиль, время почти в лимите |
 
 ## Почему v0.1 проигрывала baseline (< 0,5)
 
