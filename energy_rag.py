@@ -74,8 +74,8 @@ class Settings:
 
             # если прокси проигнорирует отключение размышлений, они тоже съедают max_tokens
             max_tokens=max(2048, min(max_tokens, 6000)),
-            top_k=max(4, env_number("TOP_K", 5, 3, 16)),
-            rerank_candidates=max(env_number("RERANK_CANDIDATES", 20, 4, 40), 8),
+            top_k=max(6, env_number("TOP_K", 8, 3, 16)),
+            rerank_candidates=max(env_number("RERANK_CANDIDATES", 24, 4, 40), 8),
             timeout=float(env_number("LLM_TIMEOUT", 60, 10, 180)),
             use_embeddings=env_flag("USE_EMBEDDINGS", True),
             use_reranker=env_flag("USE_RERANKER", True),
@@ -327,7 +327,7 @@ class BM25:
         terms = tokenize(query)
         weights = Counter(terms)
         for t in expand(terms):
-            weights.setdefault(t, 0.5)
+            weights.setdefault(t, 1.0)
         out = []
         for tf, length in zip(self.tf, self.len):
             s = 0.0
