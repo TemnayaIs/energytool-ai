@@ -208,7 +208,7 @@ data/knowledge-base/     база знаний кейса
 1. `RERANK_CANDIDATES=24` — больше кандидатов для reranker на базе v6b+reasoning (12 → 24). Низкий риск, малый прирост времени.
 2. `TOP_K=10` или `12` — расширить число чанков в контексте на базе v6b+reasoning.
 3. `RERANKER_TOP_N` 24 → 40 — если reranker подтвердит прирост.
-4. `FEWSHOT_EXCLUDE_EXCLUDE` / отбор few-shot — только после retrieval-экспериментов.
+4. `FEWSHOT_EXCLUDE_EXACT` / отбор few-shot — только после retrieval-экспериментов.
 
 **Текущий `submission.zip` в корне** — база v6b + reasoning + `RERANK_CANDIDATES=24` (готов к загрузке).
 
