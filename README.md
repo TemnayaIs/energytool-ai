@@ -193,7 +193,8 @@ data/knowledge-base/     база знаний кейса
 | 13:51 | v6b-think | 0.60444 | 543.9 с | v6b-tuned + RERANK_CANDIDATES=24 + ENABLE_THINKING=1 |
 | 14:24 | v6b-base-think | **0.64729** | 439.4 с | База v6b (FEWSHOT_K=4, TOP_K=8, контекст 11000, RC=12) + ENABLE_THINKING=1 |
 | 15:32 | v6b-base-think-selfcheck | 0.60889 | 1023.9 с |
-| 14.11 11:51 | v6b-base-think-rc24 | **0.66413** | 537.8 с | База v6b + reasoning + RERANK_CANDIDATES=24 (новый рекорд, +0.0168 к 0.64729) |
+| 14.11 11:51 | v6b-base-think-rc24 | **0.66413** | 537.8 с |
+| 14.11 13:25 | v6b-base-think-rc40 | 0.59228 | 520.3 с | База v6b + reasoning + RERANK_CANDIDATES=40 (хуже RC=24) | База v6b + reasoning + RERANK_CANDIDATES=24 (новый рекорд, +0.0168 к 0.64729) |
 | 18:08 | v10-fs6 | 0.59742 | 460.7 с | Ровно база v6b+reasoning, но FEWSHOT_K=6 вместо 4 (лишние few-shot вредят) | База v6b + reasoning + SELF_CHECK=1 (ухудшило результат, время почти в лимите) |
 
 **Лучший результат:** 0.66413 (14.11, 11:51).
