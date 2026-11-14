@@ -192,6 +192,7 @@ data/knowledge-base/     база знаний кейса
 | 13:11 | v6b-tuned | 0.57266 | 667.8 с | FEWSHOT_K=3, TOP_K=6, контекст 9000, RERANK_CANDIDATES=12, thinking=0 |
 | 13:51 | v6b-think | 0.60444 | 543.9 с | v6b-tuned + RERANK_CANDIDATES=24 + ENABLE_THINKING=1 |
 | 14:24 | v6b-base-think | **0.64729** | 439.4 с | База v6b (FEWSHOT_K=4, TOP_K=8, контекст 11000, RC=12) + ENABLE_THINKING=1 |
+| 13.11 | v6b-base-think-selfcheck | 0.59742 | — | База v6b + reasoning + SELF_CHECK=1 (ухудшило результат) |
 
 **Лучший результат:** 0.64729 (15-е место из 92 на 13.11).
 
@@ -200,12 +201,16 @@ data/knowledge-base/     база знаний кейса
 - Reasoning (`ENABLE_THINKING=1`) дал основной прирост: +0.043 к базе v6b.
 - Тюнинг (FEWSHOT_K=3, TOP_K=6, контекст 9000) сам по себе ухудшал результат (0.57266 против 0.58626), поэтому финальная версия использует базу v6b + только reasoning.
 - Время выполнения reasoning-версии даже меньше (439 с против 544–668 с), запас до лимита 20 мин есть.
+- `SELF_CHECK=1` дал 0.59742 против 0.64729 — самопроверка **ухудшила** результат (лишний LLM-вызов меняет стиль ответа), поэтому остаёмся на базе v6b + reasoning.
 
 ### Следующие эксперименты (по одному фактору)
 
-1. `SELF_CHECK=1` — самопроверка ответа LLM-ом (уже собран в `submission.zip`).
-2. `RERANK_CANDIDATES=24` — больше кандидатов для reranker на базе v6b+reasoning.
-3. Увеличение `TOP_K` / `RERANKER_TOP_N` — если retrieval-гипотезы подтвердятся.
+1. `RERANK_CANDIDATES=24` — больше кандидатов для reranker на базе v6b+reasoning (12 → 24). Низкий риск, малый прирост времени.
+2. `TOP_K=10` или `12` — расширить число чанков в контексте на базе v6b+reasoning.
+3. `RERANKER_TOP_N` 24 → 40 — если reranker подтвердит прирост.
+4. `FEWSHOT_EXCLUDE_EXCLUDE` / отбор few-shot — только после retrieval-экспериментов.
+
+**Текущий `submission.zip` в корне** — вариант self-check (0.59742). Для следующего сабмита пересобираем архив на базе v6b+reasoning с одним новым фактором.
 
 ## Тесты и проверки
 
@@ -222,4 +227,4 @@ data/knowledge-base/     база знаний кейса
 | `submission_v6b-tuned_0.57266.zip` | 0.57266 | FEWSHOT_K=3, TOP_K=6, контекст 9000, RC=12 |
 | `submission_v6b-think_0.60444.zip` | 0.60444 | Тюнинг + RC=24 + reasoning |
 | `submission_v6b-base-think_0.64729.zip` | **0.64729** | База v6b + reasoning (лучшая) |
-| `submission_v6b-selfcheck_pending.zip` | — | База v6b + reasoning + SELF_CHECK=1 (на проверке) |
+| `submission_v6b-base-think-selfcheck_0.59742.zip` | 0.59742 | База v6b + reasoning + SELF_CHECK=1 (хуже базы) |
