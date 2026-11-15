@@ -327,7 +327,7 @@ class BM25:
         terms = tokenize(query)
         weights = Counter(terms)
         for t in expand(terms):
-            weights.setdefault(t, 0.7)
+            weights.setdefault(t, 0.5)
         out = []
         for tf, length in zip(self.tf, self.len):
             s = 0.0
@@ -879,7 +879,7 @@ def build_messages(dialog: Dialog, context: str, guards: str, *, extra: str = ""
     ]
 
 
-def clean_answer(text: str, max_words: int = 170) -> str:
+def clean_answer(text: str, max_words: int = 90) -> str:
     text = strip_reasoning(text)
     text = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", text.strip())
     text = re.sub(r"^(?:Консультант|Ответ|Ассистент)\s*:\s*", "", text, flags=re.IGNORECASE)
