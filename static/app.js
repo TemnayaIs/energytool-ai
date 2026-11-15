@@ -26,6 +26,7 @@
     historyDrawer: $("#historyDrawer"),
     historyList: $("#historyList"),
     historyClose: $("#historyClose"),
+    clearHistory: $("#clearHistory"),
     newDialog: $("#newDialog"),
     toast: $("#toast"),
     caption: $(".chat-caption"),
@@ -527,6 +528,22 @@
     }
   }
 
+  async function clearHistory() {
+    if (!confirm("Удалить всю историю сессий и заявок? Это действие необратимо.")) return;
+    try {
+      await api("/api/sessions/clear", { method: "POST" });
+      state.sessionId = null;
+      state.leadDone = false;
+      localStorage.removeItem("et_session_id");
+      els.historyList.innerHTML = "";
+      els.body.innerHTML = "";
+      newDialog();
+      toast("История очищена");
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+
   async function newDialog() {
     try {
       const data = await api("/api/session/new", { method: "POST" });
@@ -582,6 +599,7 @@
     els.historyClose.addEventListener("click", () => {
       els.historyDrawer.hidden = true;
     });
+    els.clearHistory.addEventListener("click", clearHistory);
     els.newDialog.addEventListener("click", newDialog);
 
     $$("[data-focus-chat]").forEach((element) => {

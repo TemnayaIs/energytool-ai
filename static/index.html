@@ -31,6 +31,7 @@
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3.5h8l4 4v13H6v-17Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M14 3.5v4h4M9 12h6M9 15.5h6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
     <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.5 2 5 13.5h5.2L9 22l9-12h-5.3L13.5 2Z" fill="currentColor"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   </svg>
 
   <div class="noise" aria-hidden="true"></div>
@@ -126,7 +127,8 @@
             <div class="history-drawer" id="historyDrawer" hidden>
               <div class="drawer-head">
                 <strong>История диалогов</strong>
-                <button class="icon-btn" id="historyClose" aria-label="Закрыть историю"><svg class="icon"><use href="#i-close"></use></svg></button>
+                <button class="icon-btn" id="clearHistory" title="Очистить всю историю" aria-label="Очистить историю"><svg class="icon"><use href="#i-trash"></use></svg></button>
+<button class="icon-btn" id="historyClose" aria-label="Закрыть историю"><svg class="icon"><use href="#i-close"></use></svg></button>
               </div>
               <div class="drawer-list" id="historyList"></div>
             </div>

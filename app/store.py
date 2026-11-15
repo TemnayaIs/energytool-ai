@@ -143,6 +143,16 @@ def list_sessions(limit: int = 20) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def clear_all_sessions() -> int:
+    """Удаляет все сессии, сообщения и заявки. Возвращает количество удалённых сессий."""
+    with _connect() as connection:
+        count = connection.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+        connection.execute("DELETE FROM leads")
+        connection.execute("DELETE FROM messages")
+        connection.execute("DELETE FROM sessions")
+    return count
+
+
 def add_lead(session_id: str, name: str, phone: str, company: str, summary: str) -> int:
     with _connect() as connection:
         cursor = connection.execute(

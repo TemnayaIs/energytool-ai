@@ -81,6 +81,12 @@ async def sessions():
     return {"sessions": store.list_sessions(limit=25)}
 
 
+@app.post("/api/sessions/clear")
+async def clear_sessions():
+    count = store.clear_all_sessions()
+    return {"cleared": count}
+
+
 @app.get("/api/sessions/{session_id}")
 async def session_detail(session_id: str):
     bundle = store.get_session_bundle(session_id)
