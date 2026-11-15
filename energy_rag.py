@@ -73,7 +73,7 @@ class Settings:
             temperature=env_number("ANSWER_TEMPERATURE", 0.0, 0.0, 1.0, float),  # для фактов нужна детерминированность
 
             # если прокси проигнорирует отключение размышлений, они тоже съедают max_tokens
-            max_tokens=max(2048, min(max_tokens, 6000)),
+            max_tokens=max(1024, min(max_tokens, 6000)),
             top_k=max(6, env_number("TOP_K", 8, 3, 16)),
             rerank_candidates=max(env_number("RERANK_CANDIDATES", 24, 4, 40), 8),
             timeout=float(env_number("LLM_TIMEOUT", 60, 10, 180)),
