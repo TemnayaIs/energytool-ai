@@ -333,6 +333,56 @@ def wants_lead(text: str) -> bool:
     return any(marker in lowered for marker in LEAD_REQUEST_MARKERS)
 
 
+# ---- Контекстно-зависимая эскалация на менеджера ----
+# Параметры можно «крутить» без изменения логики:
+LEAD_TURN_THRESHOLD = 4          # safety net: после N ходов без заявки — предлагаем
+LEAD_PRICE_MARKERS = (
+    "цена", "стоимость", "сколько стоит", "тариф", "договор", "оформить",
+    "заказать", "купить", "предложение", "коммерческое", "расчёт", "расчет",
+    "стоит ли", "выгодно",
+)
+LEAD_COMPLEXITY_MARKERS = (
+    "несколько", "комплекс", "под ключ", "интеграция", "проект",
+    "несколько объектов", "несколько точек", "всё вместе", "все вместе",
+    "всё под", "несколько регионов",
+)
+LEAD_MISSING_SLOT_INTENTS = {
+    "solar": ("region", "roof"),
+    "orem": ("power_kw",),
+    "accounting": ("object_type",),
+    "losses": ("is_grid",),
+}
+
+
+def needs_specialist(state: dict, intent: str, slots: dict, query: str) -> tuple[bool, str]:
+    """Определяет, нужен ли специалист-менеджер на основе контекста диалога.
+
+    Возвращает (нужен_ли, причина). Явный запрос обрабатывается отдельно (wants_lead).
+    """
+    lowered = normalize(query or "")
+
+    # 1. Вопросы про цену/договор/оформление -> нужен менеджер (точных цен в базе нет)
+    if any(m in lowered for m in LEAD_PRICE_MARKERS):
+        return True, "price_terms"
+
+    # 2. Сложные/многопродуктовые сценарии
+    if any(m in lowered for m in LEAD_COMPLEXITY_MARKERS):
+        return True, "complexity"
+
+    # 3. Критичные слоты не заполнены после N ходов
+    turn = int(state.get("turn", 0))
+    if turn >= LEAD_TURN_THRESHOLD:
+        for slot in LEAD_MISSING_SLOT_INTENTS.get(intent, ()):
+            if not slots.get(slot):
+                return True, f"missing_slot:{slot}"
+
+    # 4. Safety net: долгий диалог без заявки -> предложить
+    if turn >= 5 and not state.get("lead_offered"):
+        return True, "engagement_no_resolution"
+
+    return False, ""
+
+
 def is_greeting(text: str) -> bool:
     lowered = normalize(text)
     return len(lowered.split()) <= 6 and any(lowered.startswith(marker) for marker in GREETING_MARKERS)
@@ -600,9 +650,12 @@ def plan_turn(question: str, state: dict) -> TurnPlan:
     state["topics"] = topics
 
     explicit_lead = wants_lead(query)
-    offer_lead = bool(explicit_lead or (state["turn"] >= 3 and not state.get("lead_offered")))
+    specialist_needed, specialist_reason = needs_specialist(state, intent, slots, query)
+    offer_lead = bool(explicit_lead or specialist_needed)
     if state.get("lead_done"):
         offer_lead = False
+    if offer_lead:
+        state["lead_reason"] = "explicit" if explicit_lead else specialist_reason
 
     if offer_lead:
         state["lead_offered"] = True

@@ -39,6 +39,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=config.APP_TITLE, version=config.APP_VERSION, lifespan=lifespan)
+
+@app.middleware("http")
+async def no_cache_static(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

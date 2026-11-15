@@ -528,7 +528,7 @@
     }
   }
 
-  async function clearHistory() {
+  async function clearHistoryDialog() {
     if (!confirm("Удалить всю историю сессий и заявок? Это действие необратимо.")) return;
     try {
       await api("/api/sessions/clear", { method: "POST" });
@@ -599,7 +599,9 @@
     els.historyClose.addEventListener("click", () => {
       els.historyDrawer.hidden = true;
     });
-    els.clearHistory.addEventListener("click", clearHistory);
+    if (els.clearHistory) {
+      els.clearHistory.addEventListener("click", clearHistoryDialog);
+    }
     els.newDialog.addEventListener("click", newDialog);
 
     $$("[data-focus-chat]").forEach((element) => {
@@ -680,4 +682,5 @@
   }
 
   document.addEventListener("DOMContentLoaded", init);
+  window.clearHistoryDialog = clearHistoryDialog;
 })();

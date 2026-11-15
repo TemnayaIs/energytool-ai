@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/styles.css?v=2" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23E30611'/%3E%3Cpath d='M35 10 18 36h11l-2 18 19-28H34l1-16Z' fill='white'/%3E%3C/svg%3E" />
 </head>
 <body>
@@ -92,6 +92,7 @@
               <div class="chat-tools">
                 <button class="icon-btn" id="debugToggle" title="Режим отладки" aria-label="Режим отладки" aria-pressed="false"><svg class="icon"><use href="#i-bug"></use></svg></button>
                 <button class="icon-btn" id="historyToggle" title="История диалогов" aria-label="История диалогов"><svg class="icon"><use href="#i-history"></use></svg></button>
+                <button class="icon-btn" id="clearHistory" onclick="clearHistoryDialog()" title="Очистить всю историю" aria-label="Очистить историю"><svg class="icon"><use href="#i-trash"></use></svg></button>
                 <button class="icon-btn" id="newDialog" title="Новый диалог" aria-label="Новый диалог"><svg class="icon"><use href="#i-plus"></use></svg></button>
               </div>
             </div>
@@ -127,7 +128,6 @@
             <div class="history-drawer" id="historyDrawer" hidden>
               <div class="drawer-head">
                 <strong>История диалогов</strong>
-                <button class="icon-btn" id="clearHistory" title="Очистить всю историю" aria-label="Очистить историю"><svg class="icon"><use href="#i-trash"></use></svg></button>
 <button class="icon-btn" id="historyClose" aria-label="Закрыть историю"><svg class="icon"><use href="#i-close"></use></svg></button>
               </div>
               <div class="drawer-list" id="historyList"></div>
@@ -288,6 +288,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="/static/app.js" defer></script>
+  <script src="/static/app.js?v=2" defer></script>
 </body>
 </html>
