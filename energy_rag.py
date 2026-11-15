@@ -73,7 +73,7 @@ class Settings:
             temperature=env_number("ANSWER_TEMPERATURE", 0.0, 0.0, 1.0, float),  # для фактов нужна детерминированность
 
             # если прокси проигнорирует отключение размышлений, они тоже съедают max_tokens
-            max_tokens=max(2048, min(max_tokens, 6000)),
+            max_tokens=max(1024, min(max_tokens, 6000)),
             top_k=max(6, env_number("TOP_K", 8, 3, 16)),
             rerank_candidates=max(env_number("RERANK_CANDIDATES", 24, 4, 40), 8),
             timeout=float(env_number("LLM_TIMEOUT", 60, 10, 180)),
@@ -794,7 +794,7 @@ def format_examples(pairs: Sequence[tuple[str, str]]) -> str:
 PRODUCT_DOC_RE = re.compile(r"(^|/)2[1-6]-[^/]+\.md$")
 
 
-def build_context(kb: KnowledgeBase, hits: Sequence[Hit], max_chars: int = 11000, guard_chars: int = 3000) -> tuple[str, str]:
+def build_context(kb: KnowledgeBase, hits: Sequence[Hit], max_chars: int = 11000, guard_chars: int = 5000) -> tuple[str, str]:
     blocks, used = [], 0
     for h in hits:
         block = f"[{h.chunk.label}]\n{h.chunk.text}"
