@@ -246,7 +246,7 @@ def _sections(text: str) -> list[tuple[str, str]]:
     return sections
 
 
-def _split(content: str, max_chars: int = 1600, overlap: int = 200) -> list[str]:
+def _split(content: str, max_chars: int = 1600, overlap: int = 300) -> list[str]:
     if len(content) <= max_chars:
         return [content]
     blocks = [b.strip() for b in re.split(r"\n\s*\n", content) if b.strip()]
@@ -794,7 +794,7 @@ def format_examples(pairs: Sequence[tuple[str, str]]) -> str:
 PRODUCT_DOC_RE = re.compile(r"(^|/)2[1-6]-[^/]+\.md$")
 
 
-def build_context(kb: KnowledgeBase, hits: Sequence[Hit], max_chars: int = 8000, guard_chars: int = 5000) -> tuple[str, str]:
+def build_context(kb: KnowledgeBase, hits: Sequence[Hit], max_chars: int = 11000, guard_chars: int = 5000) -> tuple[str, str]:
     blocks, used = [], 0
     for h in hits:
         block = f"[{h.chunk.label}]\n{h.chunk.text}"
