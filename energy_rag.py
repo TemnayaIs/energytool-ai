@@ -794,7 +794,7 @@ def format_examples(pairs: Sequence[tuple[str, str]]) -> str:
 PRODUCT_DOC_RE = re.compile(r"(^|/)2[1-6]-[^/]+\.md$")
 
 
-def build_context(kb: KnowledgeBase, hits: Sequence[Hit], max_chars: int = 11000, guard_chars: int = 5000) -> tuple[str, str]:
+def build_context(kb: KnowledgeBase, hits: Sequence[Hit], max_chars: int = 11000, guard_chars: int = 3000) -> tuple[str, str]:
     blocks, used = [], 0
     for h in hits:
         block = f"[{h.chunk.label}]\n{h.chunk.text}"
