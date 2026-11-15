@@ -871,7 +871,8 @@ def build_messages(dialog: Dialog, context: str, guards: str, *, extra: str = ""
     parts.append(
         "Ответь как консультант МТС EnergyTool: прямой ответ на заданный вопрос, 1–2 нужных факта из контекста, "
         "при необходимости один уточняющий вопрос о следующем шаге. Без догадок и лишних подробностей. "
-        "Обычный текст, 2–4 предложения, 35–70 слов."
+        "Структура ответа: назови продукт, приведи 2–3 ключевых факта из контекста, закончи одним уточняющим вопросом. "
+        "Отвечай кратко: 1–2 предложения, 35–70 слов."
     )
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -879,7 +880,7 @@ def build_messages(dialog: Dialog, context: str, guards: str, *, extra: str = ""
     ]
 
 
-def clean_answer(text: str, max_words: int = 90) -> str:
+def clean_answer(text: str, max_words: int = 170) -> str:
     text = strip_reasoning(text)
     text = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", text.strip())
     text = re.sub(r"^(?:Консультант|Ответ|Ассистент)\s*:\s*", "", text, flags=re.IGNORECASE)
