@@ -716,17 +716,29 @@
     card.innerHTML = "<strong>Профиль</strong>";
     const p = node("div", "", "Имя: " + (u.name || "—") + " · Телефон: " + (u.phone || "—") + " · Компания: " + (u.company || "—"));
     card.appendChild(p);
-    const btn = node("button", "btn-sm", "Редактировать");
-    btn.onclick = () => {
-      const name = prompt("Имя:", u.name || "");
-      const phone = prompt("Телефон:", u.phone || "");
-      const company = prompt("Компания:", u.company || "");
-      if (name === null) return;
-      api("/api/me", { method: "PUT", body: JSON.stringify({ name, phone, company }) })
+    const editBtn = node("button", "btn-sm", "Редактировать");
+    const form = node("div", "lead-item");
+    form.style.display = "none";
+    form.style.marginTop = "6px";
+    const nameIn = document.createElement("input");
+    nameIn.placeholder = "Имя"; nameIn.value = u.name || ""; nameIn.style.cssText = "width:100%;height:30px;margin-bottom:4px;padding:0 8px;border-radius:6px;border:1px solid var(--line);background:var(--paper-2);color:var(--ink);font-size:11px";
+    const phoneIn = document.createElement("input");
+    phoneIn.placeholder = "Телефон"; phoneIn.value = u.phone || ""; phoneIn.style.cssText = nameIn.style.cssText;
+    const companyIn = document.createElement("input");
+    companyIn.placeholder = "Компания"; companyIn.value = u.company || ""; companyIn.style.cssText = nameIn.style.cssText;
+    const saveBtn = node("button", "btn-sm", "Сохранить");
+    saveBtn.style.marginTop = "4px";
+    form.appendChild(nameIn); form.appendChild(phoneIn); form.appendChild(companyIn); form.appendChild(saveBtn);
+    card.appendChild(form);
+    editBtn.onclick = () => {
+      form.style.display = form.style.display === "none" ? "block" : "none";
+    };
+    saveBtn.onclick = () => {
+      api("/api/me", { method: "PUT", body: JSON.stringify({ name: nameIn.value, phone: phoneIn.value, company: companyIn.value }) })
         .then(d => { state.user = d.user; renderUserCabinet(); toast("Профиль обновлён"); })
         .catch(e => toast(e.message, true));
     };
-    card.appendChild(btn);
+    card.appendChild(editBtn);
     body.appendChild(card);
 
     const h3s = node("h3", "", "Мои сессии");

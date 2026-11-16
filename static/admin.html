@@ -7,15 +7,27 @@
 <style>
   body { background: var(--paper); color: var(--ink); }
   .admin-wrap { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
-  .admin-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .admin-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
   .admin-card { background: var(--paper-2); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
   .lead-row { border-bottom: 1px solid var(--line); padding: 12px 0; }
   .lead-row:last-child { border-bottom: 0; }
-  .lead-summary { white-space: pre-line; font-size: 13px; line-height: 1.6; margin-top: 6px; color: var(--ink); }
+  .lead-summary { background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-top: 8px; white-space: pre-line; font-size: 12px; line-height: 1.6; color: var(--ink); }
   .lead-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
   .btn-row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
   .btn-sm { height: 28px; padding: 0 10px; font-size: 11px; border-radius: 6px; border: 1px solid var(--line); background: var(--paper-2); color: var(--ink); cursor: pointer; }
   .btn-sm:hover { background: var(--red-soft); color: var(--red); }
+  .dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .dash-card { background: var(--paper-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px; text-align: center; }
+  .dash-val { font-size: 22px; font-weight: 800; color: var(--red); }
+  .dash-lbl { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .chart { display: flex; align-items: flex-end; gap: 6px; height: 80px; margin-top: 8px; }
+  .chart-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .chart-bar { width: 100%; background: var(--red); border-radius: 4px 4px 0 0; min-height: 2px; }
+  .chart-lbl { font-size: 9px; color: var(--muted); text-align: center; }
+  .chart-cnt { font-size: 9px; font-weight: 700; color: var(--ink); }
+  .filters { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .filters input, .filters select { height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper-2); color: var(--ink); font-size: 11px; }
+  .filters input { flex: 1; min-width: 200px; }
   .theme-toggle { position: fixed; top: 16px; right: 16px; z-index: 50; }
 </style>
 </head>
@@ -37,11 +49,27 @@
         <button class="lead-submit" type="submit" style="width:100%;height:36px;border:0;border-radius:9px;background:linear-gradient(135deg,var(--red-2),var(--red));color:#fff;font-weight:800;cursor:pointer">Войти</button>
       </form>
       <div id="loginError" style="color:var(--red);font-size:11px;margin-top:8px;display:none"></div>
+      <p style="font-size:10px;color:var(--muted);margin-top:8px">Тестовый админ: admin / admin123</p>
     </div>
 
     <div id="adminBox" hidden>
       <div class="admin-card">
+        <h2 style="margin-top:0">Дашборд</h2>
+        <div id="dashboard" class="dash-grid"></div>
+        <div id="chart" class="chart"></div>
+      </div>
+
+      <div class="admin-card">
         <h2 style="margin-top:0">Заявки</h2>
+        <div class="filters">
+          <input id="filterText" placeholder="Поиск по имени/компании/телефону">
+          <select id="filterPeriod">
+            <option value="all">Все время</option>
+            <option value="day">Сегодня</option>
+            <option value="week">Неделя</option>
+            <option value="month">Месяц</option>
+          </select>
+        </div>
         <div id="leadsList">Загрузка…</div>
       </div>
     </div>
@@ -56,6 +84,13 @@
     };
 
     let token = localStorage.getItem('et_token');
+
+    function applyTheme(t) { document.documentElement.setAttribute('data-theme', t); localStorage.setItem('et_theme', t); }
+    document.getElementById('themeToggle').addEventListener('click', () => {
+      const cur = localStorage.getItem('et_theme') || 'light';
+      applyTheme(cur === 'light' ? 'dark' : 'light');
+    });
+    applyTheme(localStorage.getItem('et_theme') || 'light');
 
     async function tryLogin() {
       const u = document.querySelector('#loginForm [name=username]').value;
@@ -73,59 +108,97 @@
       await loadLeads();
     }
 
+    function renderDashboard(leads) {
+      const dash = document.getElementById('dashboard');
+      dash.innerHTML = '';
+      const now = new Date();
+      const dayAgo = new Date(now - 24*3600*1000);
+      const weekAgo = new Date(now - 7*24*3600*1000);
+      const monthAgo = new Date(now - 30*24*3600*1000);
+      const today = leads.filter(l => new Date(l.created_at) >= dayAgo).length;
+      const week = leads.filter(l => new Date(l.created_at) >= weekAgo).length;
+      const month = leads.filter(l => new Date(l.created_at) >= monthAgo).length;
+      const cards = [
+        { label: 'Всего заявок', value: leads.length },
+        { label: 'За 24 часа', value: today },
+        { label: 'За 7 дней', value: week },
+        { label: 'За 30 дней', value: month },
+      ];
+      cards.forEach(c => {
+        const card = document.createElement('div');
+        card.className = 'dash-card';
+        card.innerHTML = '<div class="dash-val">' + c.value + '</div><div class="dash-lbl">' + c.label + '</div>';
+        dash.appendChild(card);
+      });
+      const chart = document.getElementById('chart');
+      chart.innerHTML = '';
+      const days = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now - i*24*3600*1000);
+        const key = d.toISOString().slice(0,10);
+        const cnt = leads.filter(l => (l.created_at||'').slice(0,10) === key).length;
+        days.push({ key, cnt, label: d.toLocaleDateString('ru-RU', {weekday:'short', day:'numeric'}) });
+      }
+      const maxCnt = Math.max(1, ...days.map(d => d.cnt));
+      const bars = document.createElement('div');
+      bars.className = 'chart';
+      days.forEach(d => {
+        const col = document.createElement('div');
+        col.className = 'chart-col';
+        const bar = document.createElement('div');
+        bar.className = 'chart-bar';
+        bar.style.height = (d.cnt/maxCnt*60 + 2) + 'px';
+        col.appendChild(bar);
+        const cnt = document.createElement('div');
+        cnt.className = 'chart-cnt';
+        cnt.textContent = d.cnt || '';
+        col.appendChild(cnt);
+        const lbl = document.createElement('div');
+        lbl.className = 'chart-lbl';
+        lbl.textContent = d.label;
+        col.appendChild(lbl);
+        bars.appendChild(col);
+      });
+      chart.appendChild(bars);
+    }
+
     async function loadLeads() {
       const data = await API('/api/admin/leads');
       const leads = data.leads || [];
+      renderDashboard(leads);
       const box = document.getElementById('leadsList');
       box.innerHTML = '';
-      if (!leads.length) { box.textContent = 'Заявок пока нет.'; return; }
-      leads.forEach(l => {
+      const ft = (document.getElementById('filterText')?.value || '').toLowerCase();
+      const fp = document.getElementById('filterPeriod')?.value || 'all';
+      const now = new Date();
+      let filtered = leads;
+      if (ft) filtered = filtered.filter(l => (l.name + ' ' + (l.company||'') + ' ' + (l.phone||'')).toLowerCase().includes(ft));
+      if (fp !== 'all') {
+        const cutoff = fp === 'day' ? new Date(now - 24*3600*1000) : fp === 'week' ? new Date(now - 7*24*3600*1000) : new Date(now - 30*24*3600*1000);
+        filtered = filtered.filter(l => new Date(l.created_at) >= cutoff);
+      }
+      if (!filtered.length) { box.textContent = 'Заявок не найдено.'; return; }
+      filtered.forEach(l => {
         const row = document.createElement('div');
         row.className = 'lead-row';
         const summary = (l.summary || '').replace(/\\n/g, '<br>');
         row.innerHTML = '<strong>Заявка #' + l.id + '</strong> — ' + l.name + ', ' + l.phone + (l.company ? ', ' + l.company : '') +
           '<div class="lead-meta">' + l.created_at + '</div>' +
-          (l.summary ? '<div class="lead-summary">' + summary + '</div>' : '') +
-          '<div class="btn-row">' +
-            '<button class="btn-sm" onclick="copyText(\'' + (l.name + ' | ' + l.phone + ' | ' + l.company).replace(/'/g, "\\'") + '\')">Копировать контакты</button>' +
-            '<button class="btn-sm" onclick="copyText(' + JSON.stringify(l.summary || '') + ')">Копировать резюме</button>' +
-            '<button class="btn-sm" onclick="downloadLead(' + l.id + ')">Скачать</button>' +
-            '<button class="btn-sm" onclick="forwardLead(' + l.id + ')">Переслать менеджеру</button>' +
-          '</div>';
+          (l.summary ? '<div class="lead-summary">' + summary + '</div>' : '');
+        const btns = document.createElement('div');
+        btns.className = 'btn-row';
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'btn-sm';
+        copyBtn.textContent = 'Копировать контакты';
+        copyBtn.onclick = () => { navigator.clipboard.writeText(l.name + ' | ' + l.phone + ' | ' + l.company); alert('Контакты скопированы'); };
+        btns.appendChild(copyBtn);
+        row.appendChild(btns);
         box.appendChild(row);
       });
     }
 
-    function copyText(t) { navigator.clipboard.writeText(t); alert('Скопировано'); }
-
-    function downloadLead(id) {
-      fetch('/api/admin/leads/' + id, { headers: { Authorization: 'Bearer ' + token } })
-        .then(r => r.json()).then(d => {
-          const blob = new Blob([JSON.stringify(d.lead, null, 2)], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a'); a.href = url; a.download = 'lead_' + id + '.json'; a.click();
-          URL.revokeObjectURL(url);
-        });
-    }
-
-    async function forwardLead(id) {
-      try {
-        const r = await API('/api/admin/leads/' + id + '/forward', { method: 'POST' });
-        await navigator.clipboard.writeText(r.summary || '');
-        alert('Резюме скопировано в буфер — отправьте менеджеру');
-      } catch (e) { alert(e.message); }
-    }
-
-    // Theme toggle
-    function applyTheme(t) {
-      document.documentElement.setAttribute('data-theme', t);
-      localStorage.setItem('et_theme', t);
-    }
-    document.getElementById('themeToggle').addEventListener('click', () => {
-      const cur = localStorage.getItem('et_theme') || 'light';
-      applyTheme(cur === 'light' ? 'dark' : 'light');
-    });
-    applyTheme(localStorage.getItem('et_theme') || 'light');
+    document.getElementById('filterText')?.addEventListener('input', () => loadLeads());
+    document.getElementById('filterPeriod')?.addEventListener('change', () => loadLeads());
 
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -142,12 +215,13 @@
 
     (async () => {
       if (token) {
-        try { const me = await API('/api/me'); if (me.user.role === 'admin') showAdmin(); else { token = null; localStorage.removeItem('et_token'); } } catch (e) { token = null; localStorage.removeItem('et_token'); }
+        try { const me = await API('/api/me'); if (me.user.role === 'admin') { document.getElementById('loginBox').hidden = true; document.getElementById('adminBox').hidden = false; await loadLeads(); } else { token = null; localStorage.removeItem('et_token'); } } catch (e) { token = null; localStorage.removeItem('et_token'); }
       }
     })();
   </script>
   <svg style="display:none">
     <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 2v2.2M12 19.8V22M2 12h2.2M19.8 12H22M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M19.1 4.9l-1.6 1.6M6.5 17.5l-1.6 1.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   </svg>
 </body>
 </html>
