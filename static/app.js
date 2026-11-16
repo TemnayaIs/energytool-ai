@@ -741,7 +741,14 @@
       if (!leads.length) body.appendChild(node("div", "", "Заявок пока нет."));
       leads.slice(0, 10).forEach(l => {
         const row = node("div", "lead-item");
-        row.innerHTML = "<strong>Заявка #" + l.id + "</strong> — " + l.name + ", " + l.phone + ", " + l.company + "<br><span style='font-size:10px;color:#8c94a4'>" + l.created_at + "</span>";
+        row.innerHTML = "<strong>Заявка #" + l.id + "</strong> — " + l.name + ", " + l.phone + (l.company ? ", " + l.company : "") + "<br><span style='font-size:10px;color:#8c94a4'>" + l.created_at + "</span>";
+        if (l.summary) {
+          const sum = node("div", "", l.summary.length > 150 ? l.summary.slice(0, 150) + "…" : l.summary);
+          sum.style.fontSize = "10px";
+          sum.style.color = "#8c94a4";
+          sum.style.marginTop = "2px";
+          row.appendChild(sum);
+        }
         body.appendChild(row);
       });
     } catch (e) {
@@ -760,11 +767,26 @@
       if (!leads.length) body.appendChild(node("div", "", "Заявок пока нет."));
       leads.slice(0, 30).forEach(l => {
         const row = node("div", "lead-item");
-        row.innerHTML = "<strong>Заявка #" + l.id + "</strong> — " + l.name + ", " + l.phone + ", " + l.company + "<br><span style='font-size:10px;color:#8c94a4'>" + l.created_at + "</span>";
+        const title = node("div", "", "");
+        title.innerHTML = "<strong>Заявка #" + l.id + "</strong> — " + l.name + ", " + l.phone + (l.company ? ", " + l.company : "");
+        row.appendChild(title);
+        const meta = node("div", "", l.created_at);
+        meta.style.fontSize = "10px";
+        meta.style.color = "#8c94a4";
+        row.appendChild(meta);
+        if (l.summary) {
+          const sum = node("div", "", l.summary.length > 200 ? l.summary.slice(0, 200) + "…" : l.summary);
+          sum.style.fontSize = "11px";
+          sum.style.marginTop = "4px";
+          sum.style.color = "#cfd3dc";
+          row.appendChild(sum);
+        }
         const btns = node("div", "", "");
-        btns.style.marginTop = "4px";
-        const copyBtn = node("button", "btn-sm", "Копировать");
-        copyBtn.onclick = () => { navigator.clipboard.writeText(JSON.stringify(l, null, 2)); toast("Скопировано"); };
+        btns.style.marginTop = "6px";
+        const copyBtn = node("button", "btn-sm", "Копировать контакты");
+        copyBtn.onclick = () => { navigator.clipboard.writeText(l.name + " | " + l.phone + " | " + l.company); toast("Контакты скопированы"); };
+        const copySumBtn = node("button", "btn-sm", "Копировать резюме");
+        copySumBtn.onclick = () => { navigator.clipboard.writeText(l.summary || ""); toast("Резюме скопировано"); };
         const dlBtn = node("button", "btn-sm", "Скачать");
         dlBtn.onclick = () => {
           const blob = new Blob([JSON.stringify(l, null, 2)], { type: "application/json" });
@@ -773,11 +795,17 @@
           a.href = url; a.download = "lead_" + l.id + ".json"; a.click();
           URL.revokeObjectURL(url);
         };
-        const fwdBtn = node("button", "btn-sm", "Переслать");
+        const fwdBtn = node("button", "btn-sm", "Переслать менеджеру");
         fwdBtn.onclick = async () => {
-          try { await api("/api/admin/leads/" + l.id + "/forward", { method: "POST" }); toast("Переслано"); } catch (e) { toast(e.message, true); }
+          try {
+            const text = "Заявка #" + l.id + "\n" + l.name + " | " + l.phone + " | " + l.company + "\n\n" + (l.summary || "");
+            await navigator.clipboard.writeText(text);
+            await api("/api/admin/leads/" + l.id + "/forward", { method: "POST" });
+            toast("Резюме скопировано и передано");
+          } catch (e) { toast(e.message, true); }
         };
         btns.appendChild(copyBtn);
+        btns.appendChild(copySumBtn);
         btns.appendChild(dlBtn);
         btns.appendChild(fwdBtn);
         row.appendChild(btns);

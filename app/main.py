@@ -203,7 +203,7 @@ async def admin_forward_lead(lead_id: int, request: Request):
     if not lead:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
     # Mark as forwarded by updating summary? Just return ok with a message.
-    return {"ok": True, "lead_id": lead_id, "message": "Заявка передана менеджеру"}
+    return {"ok": True, "lead_id": lead_id, "summary": lead.get("summary", ""), "message": "Заявка передана менеджеру"}
 
 
 @app.get("/api/sessions")
