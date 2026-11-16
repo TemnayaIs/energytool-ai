@@ -41,6 +41,7 @@
     authCompanyField: $("#authCompanyField"),
     cabinetModal: $("#cabinetModal"),
     cabinetClose: $("#cabinetClose"),
+    cabinetLogout: $("#cabinetLogout"),
     cabinetBody: $("#cabinetBody"),
     cabinetTitle: $("#cabinetTitle"),
     toast: $("#toast"),
@@ -663,6 +664,16 @@
     }
   }
 
+  async function logout() {
+    try { await api("/api/auth/logout", { method: "POST" }); } catch (e) { /* ignore */ }
+    state.token = null;
+    state.user = null;
+    localStorage.removeItem("et_token");
+    els.cabinetModal.hidden = true;
+    updateAuthButton();
+    toast("Вы вышли из аккаунта");
+  }
+
   async function openCabinet() {
     if (!state.token) { openAuth(); return; }
     try {
@@ -791,30 +802,6 @@
       body.appendChild(node("div", "", "Не удалось загрузить сессии."));
     }
   }
-
-  async function openCabinet() {
-    if (!state.token) { openAuth(); return; }
-    try {
-      const me = await api("/api/me");
-      state.user = me.user;
-    } catch {
-      state.token = null;
-      state.user = null;
-      localStorage.removeItem("et_token");
-      openAuth();
-      return;
-    }
-    const isAdmin = state.user.role === "admin";
-    els.cabinetTitle.textContent = isAdmin ? "Панель администратора" : "Личный кабинет";
-    els.cabinetBody.innerHTML = "";
-    if (isAdmin) {
-      await renderAdminCabinet();
-    } else {
-      await renderUserCabinet();
-    }
-    els.cabinetModal.hidden = false;
-  }
-
   async function newDialog() {
     try {
       const data = await api("/api/session/new", { method: "POST" });
@@ -879,6 +866,8 @@
     els.authSwitch.addEventListener("click", toggleAuthMode);
     els.authForm.addEventListener("submit", submitAuth);
     els.cabinetClose.addEventListener("click", () => { els.cabinetModal.hidden = true; });
+    els.cabinetLogout.addEventListener("click", logout);
+    els.cabinetLogout.addEventListener("click", logout);
 
     $$("[data-focus-chat]").forEach((element) => {
       element.addEventListener("click", (event) => {
@@ -959,6 +948,7 @@
 
   document.addEventListener("DOMContentLoaded", init);
   window.clearHistoryDialog = clearHistoryDialog;
+  window.logout = logout;
   window.openAuth = openAuth;
   window.toggleAuthMode = toggleAuthMode;
   window.submitAuth = submitAuth;
