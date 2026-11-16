@@ -83,7 +83,7 @@ class Settings:
             emb_api_key=env("EMB_API_KEY"),
             enable_thinking=env_flag("ENABLE_THINKING", True),
             self_check=env_flag("SELF_CHECK", False),
-            fewshot_k=env_number("FEWSHOT_K", 2, 0, 8),
+            fewshot_k=env_number("FEWSHOT_K", 4, 0, 8),
             rerank_template=env_flag("RERANK_TEMPLATE", True),
             fewshot_exclude_exact=env_flag("FEWSHOT_EXCLUDE_EXACT", False),
         )
@@ -872,6 +872,8 @@ def build_messages(dialog: Dialog, context: str, guards: str, *, extra: str = ""
         "Ответь как консультант МТС EnergyTool: прямой ответ на заданный вопрос, 1–2 нужных факта из контекста, "
         "при необходимости один уточняющий вопрос о следующем шаге. Без догадок и лишних подробностей. "
         "Структура ответа: назови продукт, приведи 2–3 ключевых факта из контекста, закончи одним уточняющим вопросом. "
+        "Отвечай только фактами из контекста: не добавляй предположений и данных, которых нет в базе. "
+        "Если информации недостаточно — скажи об этом прямо и предложи оставить заявку. "
         "Отвечай кратко: 1–2 предложения, 35–70 слов. Ответь связным текстом без заголовков и списков."
     )
     return [
