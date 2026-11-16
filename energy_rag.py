@@ -246,7 +246,7 @@ def _sections(text: str) -> list[tuple[str, str]]:
     return sections
 
 
-def _split(content: str, max_chars: int = 1600, overlap: int = 300) -> list[str]:
+def _split(content: str, max_chars: int = 1600, overlap: int = 240) -> list[str]:
     if len(content) <= max_chars:
         return [content]
     blocks = [b.strip() for b in re.split(r"\n\s*\n", content) if b.strip()]
@@ -872,8 +872,9 @@ def build_messages(dialog: Dialog, context: str, guards: str, *, extra: str = ""
         "Ответь как консультант МТС EnergyTool: прямой ответ на заданный вопрос, 1–2 нужных факта из контекста, "
         "при необходимости один уточняющий вопрос о следующем шаге. Без догадок и лишних подробностей. "
         "Структура ответа: назови продукт, приведи 2–3 ключевых факта из контекста, закончи одним уточняющим вопросом. "
+        "Отвечай только фактами из контекста: не добавляй предположений и данных, которых нет в базе. "
+        "Если информации недостаточно — скажи об этом прямо и предложи оставить заявку. "
         "Отвечай кратко: 1–2 предложения, 35–70 слов. Ответь связным текстом без заголовков и списков."
-        "Отвечай кратко: 1–2 предложения, 35–70 слов."
     )
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
