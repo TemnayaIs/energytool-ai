@@ -146,24 +146,30 @@
       const maxCnt = Math.max(1, ...days.map(d => d.cnt));
       const bars = document.createElement('div');
       bars.className = 'chart';
+      bars.style.cssText = 'display:flex;align-items:flex-end;gap:6px;height:90px;margin-top:8px;padding:0 4px';
       days.forEach(d => {
         const col = document.createElement('div');
-        col.className = 'chart-col';
+        col.style.cssText = 'flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0';
         const bar = document.createElement('div');
-        bar.className = 'chart-bar';
-        bar.style.height = (d.cnt/maxCnt*60 + 2) + 'px';
+        bar.style.cssText = 'width:100%;background:var(--red);border-radius:4px 4px 0 0;height:' + Math.max(4, d.cnt/maxCnt*70) + 'px';
         col.appendChild(bar);
         const cnt = document.createElement('div');
-        cnt.className = 'chart-cnt';
+        cnt.style.cssText = 'font-size:9px;font-weight:700;color:var(--ink)';
         cnt.textContent = d.cnt || '';
         col.appendChild(cnt);
         const lbl = document.createElement('div');
-        lbl.className = 'chart-lbl';
+        lbl.style.cssText = 'font-size:9px;color:var(--muted);text-align:center;white-space:nowrap';
         lbl.textContent = d.label;
         col.appendChild(lbl);
         bars.appendChild(col);
       });
       chart.appendChild(bars);
+      if (leads.length === 0) {
+        const empty = document.createElement('div');
+        empty.style.cssText = 'text-align:center;color:var(--muted);font-size:11px;margin-top:8px';
+        empty.textContent = 'Нет данных для графика';
+        chart.appendChild(empty);
+      }
     }
 
     async function loadLeads() {
@@ -187,7 +193,6 @@
         row.className = 'lead-row';
         const status = l.status || 'open';
         const statusColor = status === 'closed' ? '#1fa97a' : '#f2b544';
-        const summary = (l.summary || '').replace(/\n/g, '<br>');
         const titleDiv = document.createElement('div');
         titleDiv.innerHTML = '<strong>Заявка #' + l.id + '</strong> — ' + l.name + ', ' + l.phone + (l.company ? ', ' + l.company : '') +
           ' <span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;background:' + statusColor + '22;color:' + statusColor + '">' + (status === 'closed' ? 'Закрыта' : 'Открыта') + '</span>';
@@ -197,9 +202,19 @@
         meta.textContent = l.created_at;
         row.appendChild(meta);
         if (l.summary) {
+          const toggleBtn = document.createElement('button');
+          toggleBtn.className = 'btn-sm';
+          toggleBtn.style.marginTop = '6px';
+          toggleBtn.textContent = '🔽 Показать резюме';
           const sum = document.createElement('div');
           sum.className = 'lead-summary';
-          sum.innerHTML = summary;
+          sum.style.cssText = 'display:none;background:rgba(255,255,255,0.04);border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:8px;white-space:pre-line;font-size:12px;line-height:1.6';
+          sum.innerHTML = (l.summary || '').replace(/\n/g, '<br>');
+          toggleBtn.onclick = () => {
+            if (sum.style.display === 'none') { sum.style.display = 'block'; toggleBtn.textContent = '🔼 Скрыть резюме'; }
+            else { sum.style.display = 'none'; toggleBtn.textContent = '🔽 Показать резюме'; }
+          };
+          row.appendChild(toggleBtn);
           row.appendChild(sum);
         }
         const btns = document.createElement('div');
@@ -209,16 +224,16 @@
         copyBtn.textContent = 'Копировать контакты';
         copyBtn.onclick = () => { navigator.clipboard.writeText(l.name + ' | ' + l.phone + ' | ' + l.company); alert('Контакты скопированы'); };
         btns.appendChild(copyBtn);
-        const toggleBtn = document.createElement('button');
-        toggleBtn.className = 'btn-sm';
-        toggleBtn.textContent = status === 'closed' ? 'Открыть' : 'Закрыть';
-        toggleBtn.onclick = async () => {
+        const toggleStatusBtn = document.createElement('button');
+        toggleStatusBtn.className = 'btn-sm';
+        toggleStatusBtn.textContent = status === 'closed' ? 'Открыть' : 'Закрыть';
+        toggleStatusBtn.onclick = async () => {
           try {
             await API('/api/admin/leads/' + l.id + '/status', { method: 'PATCH', body: JSON.stringify({ status: status === 'closed' ? 'open' : 'closed' }) });
             await loadLeads();
           } catch (e) { alert(e.message); }
         };
-        btns.appendChild(toggleBtn);
+        btns.appendChild(toggleStatusBtn);
         row.appendChild(btns);
         box.appendChild(row);
       });
