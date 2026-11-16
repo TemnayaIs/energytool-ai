@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>МТС EnergyTool — ИИ-консультант для сайта</title>
+<style>
+  @page { size: A4 landscape; margin: 12mm; }
+  body { font-family: "Segoe UI", Arial, sans-serif; color: #1a1a1a; margin: 0; padding: 0; }
+  .slide { page-break-after: always; padding: 20mm 16mm; min-height: 170mm; box-sizing: border-box; }
+  .slide:last-child { page-break-after: auto; }
+  h1 { color: #e30613; font-size: 32px; margin: 0 0 8px; }
+  h2 { color: #e30613; font-size: 22px; margin: 16px 0 6px; border-bottom: 2px solid #e30613; padding-bottom: 4px; }
+  h3 { font-size: 16px; margin: 10px 0 4px; color: #333; }
+  p, li { font-size: 14px; line-height: 1.5; margin: 4px 0; }
+  ul { margin: 4px 0 4px 20px; padding: 0; }
+  .subtitle { color: #666; font-size: 14px; margin-bottom: 12px; }
+  .highlight { background: #fff3f4; border-left: 4px solid #e30613; padding: 8px 12px; margin: 8px 0; font-size: 13px; }
+  .cols { display: flex; gap: 16px; }
+  .col { flex: 1; }
+  .num { font-size: 28px; font-weight: 800; color: #e30613; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; margin: 6px 0; }
+  th, td { border: 1px solid #ddd; padding: 4px 6px; text-align: left; }
+  th { background: #f5f5f5; }
+  .footer { font-size: 10px; color: #999; margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<div class="slide">
+  <h1>МТС EnergyTool — ИИ-консультант для сайта</h1>
+  <p class="subtitle">Трек AI от МТС · True Tech Hack&Change 2026 · Первый тур</p>
+  <p><strong>Репозиторий:</strong> https://github.com/TemnayaIs/energytool-ai</p>
+  <h2>Задача</h2>
+  <p>Разработать ИИ-консультанта, который помогает клиентам МТС EnergyTool разобраться в вопросах энергопотребления: снизить расходы на электроэнергию, наладить учёт энергоресурсов и выявить потери.</p>
+  <h2>Что умеет решение</h2>
+  <ul>
+    <li>RAG: поиск по базе знаний (BM25 + bge-m3 + Qwen3 Reranker)</li>
+    <li>Отвечает понятным языком, подбирает продукты EnergyTool</li>
+    <li>Задаёт уточняющие вопросы, корректно отказывает при недостатке информации</li>
+    <li>Собирает заявку для менеджера (имя, телефон, компания)</li>
+    <li>Многошаговый диалог, сброс контекста, режим отладки, история сессий</li>
+  </ul>
+</div>
+
+<div class="slide">
+  <h2>Архитектура</h2>
+  <div class="cols">
+    <div class="col">
+      <h3>Веб-прототип (app/)</h3>
+      <ul>
+        <li>FastAPI + SQLite + статический фронтенд</li>
+        <li>Сессии, сообщения, заявки (leads)</li>
+        <li>Контекстно-зависимая эскалация на менеджера</li>
+        <li>Режим отладки (источники, latency, intent)</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3>RAG (energy_rag.py)</h3>
+      <ul>
+        <li>BM25 + bge-m3 (dense) → RRF → Qwen3 Reranker 8B</li>
+        <li>Qwen3.8-27B (thinking mode) для генерации</li>
+        <li>Курируемые ответы (answers_core.py) + extractive fallback</li>
+        <li>Self-check отключён (ухудшал стиль)</li>
+      </ul>
+    </div>
+  </div>
+  <h2>Ключевые метрики</h2>
+  <div class="cols">
+    <div class="col"><span class="num">0.6702</span><br>Лучший балл на платформе (15-е из 117)</div>
+    <div class="col"><span class="num">242</span><br>Фрагментов базы знаний</div>
+    <div class="col"><span class="num">150</span><br>Макс. слов в ответе</div>
+    <div class="col"><span class="num">1000+</span><br>Вопросов в smoke-тестах</div>
+  </div>
+</div>
+
+<div class="slide">
+  <h2>Как работает RAG</h2>
+  <ul>
+    <li><strong>Чанкинг:</strong> Markdown → разделы → фрагменты ~1600 символов, overlap 240</li>
+    <li><strong>BM25:</strong> лексический поиск + синонимы (АСКУЭ, УСПД, ПУ, тарифы)</li>
+    <li><strong>Dense:</strong> bge-m3 эмбеддинги, косинусное сходство</li>
+    <li><strong>RRF:</strong> слияние ранжирований (веса BM25 1.0, dense 1.3)</li>
+    <li><strong>Reranker:</strong> Qwen3-Reranker-8B, топ-24 кандидата → топ-8</li>
+    <li><strong>Контекст:</strong> 11000 символов + guard-блоки (ограничения по продукту)</li>
+  </ul>
+  <h2>Генерация ответа</h2>
+  <ul>
+    <li>Qwen3.8-27B с reasoning (thinking mode)</li>
+    <li>Температура 0.0, детерминированный вывод</li>
+    <li>Структура: продукт → 2–3 факта → уточняющий вопрос</li>
+    <li>Курируемые ответы для частых вопросов (детерминированные)</li>
+    <li>Extractive fallback при сбое LLM</li>
+  </ul>
+</div>
+
+<div class="slide">
+  <h2>Контекстно-зависимая эскалация на менеджера</h2>
+  <p>Форма контактов показывается не по таймеру, а по контексту диалога:</p>
+  <ul>
+    <li>Вопросы про цену/договор/оформление → сразу форма</li>
+    <li>Сложные/многопродуктовые сценарии → форма</li>
+    <li>Критичные слоты (регион, мощность, тип объекта) не заполнены после 4 ходов → форма</li>
+    <li>Safety net: после 5 ходов без заявки</li>
+  </ul>
+  <p>Настраиваемые параметры: <code>LEAD_TURN_THRESHOLD</code>, <code>LEAD_PRICE_MARKERS</code>, <code>LEAD_COMPLEXITY_MARKERS</code>, <code>LEAD_MISSING_SLOT_INTENTS</code>.</p>
+  <h2>Сбор заявки</h2>
+  <ul>
+    <li>Форма: имя, телефон, компания, согласие</li>
+    <li>Резюме диалога для менеджера (LLM или fallback)</li>
+    <li>Сохранение в SQLite, доступ через API</li>
+    <li>История сессий сохраняется, доступна для проверки</li>
+  </ul>
+</div>
+
+<div class="slide">
+  <h2>История экспериментов (платформа)</h2>
+  <table>
+    <tr><th>Дата</th><th>Вариант</th><th>Скор</th><th>Комментарий</th></tr>
+    <tr><td>10.11</td><td>v0.1</td><td>0.31423</td><td>Базовая версия, лучший день 1</td></tr>
+    <tr><td>12.11</td><td>v6b</td><td>0.58626</td><td>Полный RAG (BM25+bge-m3+rerank)</td></tr>
+    <tr><td>13.11</td><td>v6b-base-think</td><td>0.64729</td><td>+ reasoning (thinking mode)</td></tr>
+    <tr><td>13.11</td><td>v6b-base-think-rc24</td><td>0.66413</td><td>+ RERANK_CANDIDATES=24</td></tr>
+    <tr><td>15.11</td><td>v6b-promptstruct</td><td>0.67016</td><td>+ промпт со структурой</td></tr>
+  </table>
+  <p class="footer">Лучший балл: 0.67016 (15-е место из 117). Топ-10: 0.68–0.70.</p>
+</div>
+
+<div class="slide">
+  <h2>Технические детали</h2>
+  <ul>
+    <li><strong>Запуск:</strong> <code>python -m uvicorn app.main:app --host 127.0.0.1 --port 8000</code></li>
+    <li><strong>Docker:</strong> <code>docker compose up --build</code></li>
+    <li><strong>Сабмит:</strong> <code>python scripts/build_submission.py</code> → <code>submission.zip</code></li>
+    <li><strong>Тесты:</strong> <code>python tests/smoke_solution.py</code> (1000/1000 OK)</li>
+    <li><strong>Ограничения соблюдены:</strong> ≤150 слов, refusal при отсутствии информации, только из базы знаний, без секретов в коде</li>
+    <li><strong>Данные:</strong> только предоставленная база знаний, тестовые данные для демо</li>
+  </ul>
+  <h2>Репозиторий</h2>
+  <p>https://github.com/TemnayaIs/energytool-ai</p>
+  <p class="footer">Прототип ИИ-консультанта для хакатона МТС True Tech Hack&Change 2026.</p>
+</div>
+
+</body>
+</html>
