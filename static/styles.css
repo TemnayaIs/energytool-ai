@@ -2028,3 +2028,26 @@ main,
   border-top: 1px solid rgba(255,255,255,0.06);
 }
 .footer-team strong { color: #eef0f5; }
+
+.auth-modal, .cabinet-modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+}
+.auth-modal[hidden], .cabinet-modal[hidden] { display: none; }
+.auth-card, .cabinet-card {
+  background: #1a1d24; border-radius: 16px; padding: 20px; width: 360px; max-width: 90vw;
+  max-height: 80vh; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1);
+}
+.auth-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.auth-head strong { color: #fff; font-size: 16px; }
+.auth-form .lead-field { margin-bottom: 8px; }
+.auth-switch { background: none; border: 0; color: #ff6b78; font-size: 11px; cursor: pointer; margin-top: 8px; }
+.auth-error { color: #ff6b78; font-size: 11px; margin-top: 8px; }
+.cabinet-body { font-size: 12px; color: #eef0f5; }
+.cabinet-body h3 { color: #ff6b78; font-size: 13px; margin: 12px 0 4px; }
+.cabinet-body table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.cabinet-body th, .cabinet-body td { border: 1px solid rgba(255,255,255,0.1); padding: 4px 6px; }
+.cabinet-body th { background: rgba(255,255,255,0.05); }
+.cabinet-body .lead-item { background: rgba(255,255,255,0.04); border-radius: 8px; padding: 8px; margin-bottom: 8px; }
+.cabinet-body .lead-item strong { color: #fff; }
+.cabinet-body .btn-sm { height: 24px; padding: 0 8px; font-size: 10px; border-radius: 6px; border: 0; background: rgba(255,255,255,0.1); color: #fff; cursor: pointer; margin-right: 4px; }

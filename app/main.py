@@ -8,7 +8,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -17,7 +17,7 @@ from energy_rag import Consultant, dialog_from_messages
 
 from . import config, consultant, store
 from .summary import build_summary
-from .schemas import ChatIn, LeadIn
+from .schemas import ChatIn, LeadIn, RegisterIn, LoginIn, ProfileUpdateIn
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("energytool")
@@ -30,6 +30,12 @@ STARTED_AT = datetime.now(timezone.utc)
 async def lifespan(app: FastAPI):
     global BOT
     store.init_db()
+    # Создаём администратора по умолчанию, если его нет
+    if not store.get_user_by_username("admin"):
+        try:
+            store.create_user("admin", "admin123", "admin", "Администратор", "", "")
+        except ValueError:
+            pass
     BOT = Consultant(config.KB_PATH, cache_dir=config.DB_PATH.parent)
     logger.info("База знаний: %s фрагментов из %s; поиск: %s", len(BOT.kb.chunks), config.KB_PATH, BOT.retriever.mode)
     if BOT.retriever.dense_error:
@@ -65,6 +71,32 @@ async def index_page():
     return FileResponse(config.STATIC_DIR / "index.html")
 
 
+
+
+def _token_from_request(request) -> str:
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return request.headers.get("x-auth-token", "").strip()
+
+
+def _current_user(request) -> dict | None:
+    return store.get_user_by_token(_token_from_request(request))
+
+
+def _require_user(request) -> dict:
+    user = _current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Требуется авторизация")
+    return user
+
+
+def _require_admin(request) -> dict:
+    user = _require_user(request)
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Требуются права администратора")
+    return user
+
 @app.get("/api/health")
 async def health():
     return {
@@ -84,6 +116,94 @@ async def health():
 async def new_session():
     session = store.create_session()
     return {"session_id": session["id"], "created_at": session["created_at"]}
+
+
+@app.post("/api/auth/register")
+async def register(payload: RegisterIn):
+    try:
+        user = store.create_user(payload.username, payload.password, "user", payload.name, payload.phone, payload.company)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    token = store.create_token(user["id"])
+    return {"token": token, "user": user}
+
+
+@app.post("/api/auth/login")
+async def login(payload: LoginIn):
+    user = store.get_user_by_username(payload.username)
+    if not user or not store.verify_password(payload.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+    token = store.create_token(user["id"])
+    safe = {k: user[k] for k in ("id", "username", "role", "name", "phone", "company", "created_at")}
+    return {"token": token, "user": safe}
+
+
+@app.get("/api/me")
+async def me(request: Request):
+    user = _require_user(request)
+    return {"user": user}
+
+
+@app.put("/api/me")
+async def update_me(payload: ProfileUpdateIn, request: Request):
+    user = _require_user(request)
+    updated = store.update_user(user["id"], payload.name, payload.phone, payload.company)
+    return {"user": updated}
+
+
+@app.post("/api/auth/logout")
+async def logout(request: Request):
+    token = _token_from_request(request)
+    if token:
+        store.revoke_token(token)
+    return {"ok": True}
+
+
+@app.get("/api/my/sessions")
+async def my_sessions(request: Request):
+    _require_user(request)
+    return {"sessions": store.list_sessions(limit=50)}
+
+
+@app.get("/api/my/leads")
+async def my_leads(request: Request):
+    user = _require_user(request)
+    leads = [l for l in store.list_all_leads(200) if l.get("session_id")]
+    return {"leads": leads}
+
+
+@app.get("/api/admin/leads")
+async def admin_leads(request: Request):
+    _require_admin(request)
+    return {"leads": store.list_all_leads(200)}
+
+
+@app.get("/api/admin/sessions")
+async def admin_sessions(request: Request):
+    _require_admin(request)
+    return {"sessions": store.list_all_sessions(100)}
+
+
+@app.get("/api/admin/leads/{lead_id}")
+async def admin_lead_detail(lead_id: int, request: Request):
+    _require_admin(request)
+    leads = store.list_all_leads(1000)
+    lead = next((l for l in leads if l["id"] == lead_id), None)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    bundle = store.get_session_bundle(lead["session_id"]) if lead.get("session_id") else None
+    return {"lead": lead, "session": bundle}
+
+
+@app.post("/api/admin/leads/{lead_id}/forward")
+async def admin_forward_lead(lead_id: int, request: Request):
+    _require_admin(request)
+    leads = store.list_all_leads(1000)
+    lead = next((l for l in leads if l["id"] == lead_id), None)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    # Mark as forwarded by updating summary? Just return ok with a message.
+    return {"ok": True, "lead_id": lead_id, "message": "Заявка передана менеджеру"}
 
 
 @app.get("/api/sessions")

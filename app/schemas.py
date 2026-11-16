@@ -46,3 +46,29 @@ class LeadIn(BaseModel):
         if not value:
             raise ValueError("Нужно согласие на обработку персональных данных")
         return value
+
+class RegisterIn(BaseModel):
+    username: str = Field(min_length=3, max_length=40)
+    password: str = Field(min_length=4, max_length=120)
+    name: str = Field(default="", max_length=120)
+    phone: str = Field(default="", max_length=40)
+    company: str = Field(default="", max_length=200)
+
+    @field_validator("username")
+    @classmethod
+    def strip_username(cls, value: str) -> str:
+        value = value.strip().lower()
+        if not value or " " in value:
+            raise ValueError("username без пробелов")
+        return value
+
+
+class LoginIn(BaseModel):
+    username: str = Field(min_length=1, max_length=40)
+    password: str = Field(min_length=1, max_length=120)
+
+
+class ProfileUpdateIn(BaseModel):
+    name: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=40)
+    company: str | None = Field(default=None, max_length=200)

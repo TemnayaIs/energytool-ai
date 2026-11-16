@@ -28,6 +28,21 @@
     historyClose: $("#historyClose"),
     clearHistory: $("#clearHistory"),
     newDialog: $("#newDialog"),
+    authToggle: $("#authToggle"),
+    authModal: $("#authModal"),
+    authClose: $("#authClose"),
+    authForm: $("#authForm"),
+    authSubmit: $("#authSubmit"),
+    authSwitch: $("#authSwitch"),
+    authTitle: $("#authTitle"),
+    authError: $("#authError"),
+    authNameField: $("#authNameField"),
+    authPhoneField: $("#authPhoneField"),
+    authCompanyField: $("#authCompanyField"),
+    cabinetModal: $("#cabinetModal"),
+    cabinetClose: $("#cabinetClose"),
+    cabinetBody: $("#cabinetBody"),
+    cabinetTitle: $("#cabinetTitle"),
     toast: $("#toast"),
     caption: $(".chat-caption"),
   };
@@ -38,6 +53,9 @@
     busy: false,
     leadDone: false,
     lastDebug: null,
+    token: localStorage.getItem("et_token") || null,
+    user: null,
+    authMode: "login",
   };
 
   const INITIAL_QUICK = [
@@ -90,8 +108,10 @@
   }
 
   async function api(path, options = {}) {
+    const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+    if (state.token) headers["Authorization"] = "Bearer " + state.token;
     const response = await fetch(path, {
-      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      headers,
       ...options,
     });
     let data = null;
@@ -544,6 +564,257 @@
     }
   }
 
+  // ------------------------------------------------------------------
+  // Аутентификация и личный кабинет
+  // ------------------------------------------------------------------
+
+  let authMode = "login";
+
+  function toggleAuthMode() {
+    authMode = authMode === "login" ? "register" : "login";
+    els.authTitle.textContent = authMode === "login" ? "Вход" : "Регистрация";
+    els.authSubmit.textContent = authMode === "login" ? "Войти" : "Зарегистрироваться";
+    els.authSwitch.textContent = authMode === "login" ? "Нет аккаунта? Зарегистрироваться" : "Уже есть аккаунт? Войти";
+    els.authNameField.hidden = authMode === "login";
+    els.authPhoneField.hidden = authMode === "login";
+    els.authCompanyField.hidden = authMode === "login";
+    els.authError.hidden = true;
+  }
+
+  function openAuth() {
+    if (state.token && !state.user) {
+      api("/api/me").then(d => {
+        state.user = d.user;
+        openCabinet();
+      }).catch(() => {
+        state.token = null;
+        state.user = null;
+        localStorage.removeItem("et_token");
+        showAuthModal();
+      });
+      return;
+    }
+    if (state.token && state.user) {
+      openCabinet();
+      return;
+    }
+    showAuthModal();
+  }
+
+  function showAuthModal() {
+    authMode = "login";
+    els.authTitle.textContent = "Вход";
+    els.authSubmit.textContent = "Войти";
+    els.authSwitch.textContent = "Нет аккаунта? Зарегистрироваться";
+    els.authNameField.hidden = true;
+    els.authPhoneField.hidden = true;
+    els.authCompanyField.hidden = true;
+    els.authError.hidden = true;
+    els.authForm.reset();
+    els.authModal.hidden = false;
+  }
+
+  async function submitAuth(event) {
+    event.preventDefault();
+    els.authError.hidden = true;
+    const form = els.authForm;
+    const username = form.elements.username.value.trim();
+    const password = form.elements.password.value;
+    try {
+      if (authMode === "register") {
+        const data = await api("/api/auth/register", {
+          method: "POST",
+          body: JSON.stringify({
+            username,
+            password,
+            name: form.elements.name.value.trim(),
+            phone: form.elements.phone.value.trim(),
+            company: form.elements.company.value.trim(),
+          }),
+        });
+        state.token = data.token;
+        state.user = data.user;
+      } else {
+        const data = await api("/api/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ username, password }),
+        });
+        state.token = data.token;
+        state.user = data.user;
+      }
+      localStorage.setItem("et_token", state.token);
+      els.authModal.hidden = true;
+      updateAuthButton();
+      toast("Добро пожаловать, " + (state.user.name || state.user.username));
+      openCabinet();
+    } catch (error) {
+      els.authError.textContent = error.message;
+      els.authError.hidden = false;
+    }
+  }
+
+  function updateAuthButton() {
+    if (state.token && state.user) {
+      els.authToggle.title = state.user.name || state.user.username;
+      els.authToggle.setAttribute("aria-label", "Личный кабинет");
+    } else {
+      els.authToggle.title = "Войти";
+      els.authToggle.setAttribute("aria-label", "Войти");
+    }
+  }
+
+  async function openCabinet() {
+    if (!state.token) { openAuth(); return; }
+    try {
+      const me = await api("/api/me");
+      state.user = me.user;
+    } catch {
+      state.token = null;
+      state.user = null;
+      localStorage.removeItem("et_token");
+      openAuth();
+      return;
+    }
+    const isAdmin = state.user.role === "admin";
+    els.cabinetTitle.textContent = isAdmin ? "Панель администратора" : "Личный кабинет";
+    els.cabinetBody.innerHTML = "";
+    if (isAdmin) {
+      await renderAdminCabinet();
+    } else {
+      await renderUserCabinet();
+    }
+    els.cabinetModal.hidden = false;
+  }
+
+  async function renderUserCabinet() {
+    const u = state.user;
+    const body = els.cabinetBody;
+    body.innerHTML = "";
+    const card = node("div", "lead-card");
+    card.innerHTML = "<strong>Профиль</strong>";
+    const p = node("div", "", "Имя: " + (u.name || "—") + " · Телефон: " + (u.phone || "—") + " · Компания: " + (u.company || "—"));
+    card.appendChild(p);
+    const btn = node("button", "btn-sm", "Редактировать");
+    btn.onclick = () => {
+      const name = prompt("Имя:", u.name || "");
+      const phone = prompt("Телефон:", u.phone || "");
+      const company = prompt("Компания:", u.company || "");
+      if (name === null) return;
+      api("/api/me", { method: "PUT", body: JSON.stringify({ name, phone, company }) })
+        .then(d => { state.user = d.user; renderUserCabinet(); toast("Профиль обновлён"); })
+        .catch(e => toast(e.message, true));
+    };
+    card.appendChild(btn);
+    body.appendChild(card);
+
+    const h3s = node("h3", "", "Мои сессии");
+    body.appendChild(h3s);
+    try {
+      const data = await api("/api/my/sessions");
+      const list = data.sessions || [];
+      if (!list.length) body.appendChild(node("div", "", "Сессий пока нет."));
+      list.slice(0, 10).forEach(s => {
+        const row = node("div", "lead-item");
+        row.innerHTML = "<strong>" + (s.title || s.id) + "</strong><br><span style='font-size:10px;color:#8c94a4'>" + s.created_at + " · " + s.message_count + " сообщ.</span>";
+        body.appendChild(row);
+      });
+    } catch (e) {
+      body.appendChild(node("div", "", "Не удалось загрузить сессии."));
+    }
+
+    const h3l = node("h3", "", "Мои заявки");
+    body.appendChild(h3l);
+    try {
+      const data = await api("/api/my/leads");
+      const leads = data.leads || [];
+      if (!leads.length) body.appendChild(node("div", "", "Заявок пока нет."));
+      leads.slice(0, 10).forEach(l => {
+        const row = node("div", "lead-item");
+        row.innerHTML = "<strong>Заявка #" + l.id + "</strong> — " + l.name + ", " + l.phone + ", " + l.company + "<br><span style='font-size:10px;color:#8c94a4'>" + l.created_at + "</span>";
+        body.appendChild(row);
+      });
+    } catch (e) {
+      body.appendChild(node("div", "", "Не удалось загрузить заявки."));
+    }
+  }
+
+  async function renderAdminCabinet() {
+    const body = els.cabinetBody;
+    body.innerHTML = "";
+    const h3 = node("h3", "", "Все заявки");
+    body.appendChild(h3);
+    try {
+      const data = await api("/api/admin/leads");
+      const leads = data.leads || [];
+      if (!leads.length) body.appendChild(node("div", "", "Заявок пока нет."));
+      leads.slice(0, 30).forEach(l => {
+        const row = node("div", "lead-item");
+        row.innerHTML = "<strong>Заявка #" + l.id + "</strong> — " + l.name + ", " + l.phone + ", " + l.company + "<br><span style='font-size:10px;color:#8c94a4'>" + l.created_at + "</span>";
+        const btns = node("div", "", "");
+        btns.style.marginTop = "4px";
+        const copyBtn = node("button", "btn-sm", "Копировать");
+        copyBtn.onclick = () => { navigator.clipboard.writeText(JSON.stringify(l, null, 2)); toast("Скопировано"); };
+        const dlBtn = node("button", "btn-sm", "Скачать");
+        dlBtn.onclick = () => {
+          const blob = new Blob([JSON.stringify(l, null, 2)], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url; a.download = "lead_" + l.id + ".json"; a.click();
+          URL.revokeObjectURL(url);
+        };
+        const fwdBtn = node("button", "btn-sm", "Переслать");
+        fwdBtn.onclick = async () => {
+          try { await api("/api/admin/leads/" + l.id + "/forward", { method: "POST" }); toast("Переслано"); } catch (e) { toast(e.message, true); }
+        };
+        btns.appendChild(copyBtn);
+        btns.appendChild(dlBtn);
+        btns.appendChild(fwdBtn);
+        row.appendChild(btns);
+        body.appendChild(row);
+      });
+    } catch (e) {
+      body.appendChild(node("div", "", "Не удалось загрузить заявки: " + e.message));
+    }
+
+    const h3s = node("h3", "", "Все сессии");
+    body.appendChild(h3s);
+    try {
+      const data = await api("/api/admin/sessions");
+      const sessions = data.sessions || [];
+      if (!sessions.length) body.appendChild(node("div", "", "Сессий пока нет."));
+      sessions.slice(0, 20).forEach(s => {
+        const row = node("div", "lead-item");
+        row.innerHTML = "<strong>" + (s.title || s.id) + "</strong><br><span style='font-size:10px;color:#8c94a4'>" + s.created_at + " · " + s.message_count + " сообщ. · " + (s.has_lead ? "заявка" : "без заявки") + "</span>";
+        body.appendChild(row);
+      });
+    } catch (e) {
+      body.appendChild(node("div", "", "Не удалось загрузить сессии."));
+    }
+  }
+
+  async function openCabinet() {
+    if (!state.token) { openAuth(); return; }
+    try {
+      const me = await api("/api/me");
+      state.user = me.user;
+    } catch {
+      state.token = null;
+      state.user = null;
+      localStorage.removeItem("et_token");
+      openAuth();
+      return;
+    }
+    const isAdmin = state.user.role === "admin";
+    els.cabinetTitle.textContent = isAdmin ? "Панель администратора" : "Личный кабинет";
+    els.cabinetBody.innerHTML = "";
+    if (isAdmin) {
+      await renderAdminCabinet();
+    } else {
+      await renderUserCabinet();
+    }
+    els.cabinetModal.hidden = false;
+  }
+
   async function newDialog() {
     try {
       const data = await api("/api/session/new", { method: "POST" });
@@ -603,6 +874,11 @@
       els.clearHistory.addEventListener("click", clearHistoryDialog);
     }
     els.newDialog.addEventListener("click", newDialog);
+    els.authToggle.addEventListener("click", openAuth);
+    els.authClose.addEventListener("click", () => { els.authModal.hidden = true; });
+    els.authSwitch.addEventListener("click", toggleAuthMode);
+    els.authForm.addEventListener("submit", submitAuth);
+    els.cabinetClose.addEventListener("click", () => { els.cabinetModal.hidden = true; });
 
     $$("[data-focus-chat]").forEach((element) => {
       element.addEventListener("click", (event) => {
@@ -683,4 +959,8 @@
 
   document.addEventListener("DOMContentLoaded", init);
   window.clearHistoryDialog = clearHistoryDialog;
+  window.openAuth = openAuth;
+  window.toggleAuthMode = toggleAuthMode;
+  window.submitAuth = submitAuth;
+  window.openCabinet = openCabinet;
 })();
