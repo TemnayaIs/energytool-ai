@@ -235,3 +235,15 @@ data/knowledge-base/     база знаний кейса
 | `submission_v6b-base-think_0.64729.zip` | **0.64729** | База v6b + reasoning (лучшая) |
 | `submission_v6b-selfcheck_0.60889.zip` | 0.60889 | База v6b + reasoning + SELF_CHECK=1 (хуже базы) |
 | `submission_v10_fs6.zip` | 0.59742 | База v6b + reasoning + FEWSHOT_K=6 (хуже базы) |
+
+## Команда
+
+**Pop** — Ананиев Егор, Багаутдинов Тимур, Малов Артём
+
+| Участник | Telegram |
+|---|---|
+| Ананиев Егор | @egor4ik_aa |
+| Багаутдинов Тимур | @keneez |
+| Малов Артём | @niuguimui |
+
+Репозиторий: https://github.com/TemnayaIs/energytool-ai
