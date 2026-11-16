@@ -29,6 +29,7 @@
     clearHistory: $("#clearHistory"),
     newDialog: $("#newDialog"),
     authToggle: $("#authToggle"),
+    themeToggle: $("#themeToggle"),
     authModal: $("#authModal"),
     authClose: $("#authClose"),
     authForm: $("#authForm"),
@@ -582,6 +583,16 @@
     els.authError.hidden = true;
   }
 
+  function applyTheme(t) {
+    document.documentElement.setAttribute("data-theme", t);
+    localStorage.setItem("et_theme", t);
+  }
+  function toggleTheme() {
+    const cur = localStorage.getItem("et_theme") || "light";
+    applyTheme(cur === "light" ? "dark" : "light");
+  }
+  applyTheme(localStorage.getItem("et_theme") || "light");
+
   function openAuth() {
     if (state.token && !state.user) {
       api("/api/me").then(d => {
@@ -890,6 +901,7 @@
     }
     els.newDialog.addEventListener("click", newDialog);
     els.authToggle.addEventListener("click", openAuth);
+    els.themeToggle.addEventListener("click", toggleTheme);
     els.authClose.addEventListener("click", () => { els.authModal.hidden = true; });
     els.authSwitch.addEventListener("click", toggleAuthMode);
     els.authForm.addEventListener("submit", submitAuth);

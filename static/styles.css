@@ -2051,3 +2051,19 @@ main,
 .cabinet-body .lead-item { background: rgba(255,255,255,0.04); border-radius: 8px; padding: 8px; margin-bottom: 8px; }
 .cabinet-body .lead-item strong { color: #fff; }
 .cabinet-body .btn-sm { height: 24px; padding: 0 8px; font-size: 10px; border-radius: 6px; border: 0; background: rgba(255,255,255,0.1); color: #fff; cursor: pointer; margin-right: 4px; }
+
+/* Dark theme */
+html[data-theme="dark"] {
+  --ink: #eef0f5;
+  --ink-2: #cfd3dc;
+  --ink-3: #a0a6b3;
+  --paper: #0b0d12;
+  --paper-2: #151922;
+  --white: #ffffff;
+  --muted: #9298a5;
+  --muted-2: #6c7280;
+  --line: rgba(255,255,255,0.09);
+  --line-dark: rgba(255,255,255,0.08);
+  --shadow: 0 24px 70px -28px rgba(0,0,0,0.6);
+}
+html[data-theme="dark"] body { background: var(--paper); color: var(--ink); }

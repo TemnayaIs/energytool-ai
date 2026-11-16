@@ -71,6 +71,11 @@ async def index_page():
     return FileResponse(config.STATIC_DIR / "index.html")
 
 
+@app.get("/admin", include_in_schema=False)
+async def admin_page():
+    return FileResponse(config.STATIC_DIR / "admin.html")
+
+
 
 
 def _token_from_request(request) -> str:
