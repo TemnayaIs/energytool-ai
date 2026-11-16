@@ -2018,3 +2018,13 @@ main,
     scroll-behavior: auto !important;
   }
 }
+
+
+.footer-team {
+  padding: 10px 0;
+  text-align: center;
+  font-size: 11px;
+  color: #8c94a4;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.footer-team strong { color: #eef0f5; }
