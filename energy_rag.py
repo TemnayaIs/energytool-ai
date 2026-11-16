@@ -85,7 +85,7 @@ class Settings:
             self_check=env_flag("SELF_CHECK", False),
             fewshot_k=env_number("FEWSHOT_K", 4, 0, 8),
             rerank_template=env_flag("RERANK_TEMPLATE", True),
-            fewshot_exclude_exact=env_flag("FEWSHOT_EXCLUDE_EXACT", True),
+            fewshot_exclude_exact=env_flag("FEWSHOT_EXCLUDE_EXACT", False),
         )
 
     @property
