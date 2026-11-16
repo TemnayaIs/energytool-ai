@@ -308,6 +308,9 @@
         <div class="lead-field" id="authNameField" hidden><input name="name" type="text" placeholder="Имя"></div>
         <div class="lead-field" id="authPhoneField" hidden><input name="phone" type="tel" placeholder="+7 999 123-45-67"></div>
         <div class="lead-field" id="authCompanyField" hidden><input name="company" type="text" placeholder="Компания"></div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin:6px 0;cursor:pointer">
+          <input type="checkbox" id="authAdminMode"> Войти как администратор (откроет панель /admin)
+        </label>
         <button class="lead-submit" type="submit" id="authSubmit">Войти</button>
       </form>
       <button class="auth-switch" id="authSwitch" type="button">Нет аккаунта? Зарегистрироваться</button>

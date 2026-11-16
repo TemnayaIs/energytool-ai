@@ -32,7 +32,7 @@ def init_db() -> None:
             """
             CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,
-                title TEXT NOT NULL DEFAULT 'Новый диалог',
+                title TEXT NOT NULL DEFAULT 'Новая сессия',
                 state TEXT NOT NULL DEFAULT '{}',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
@@ -56,6 +56,7 @@ def init_db() -> None:
                 company TEXT NOT NULL,
                 summary TEXT NOT NULL,
                 created_at TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'open',
                 FOREIGN KEY (session_id) REFERENCES sessions(id)
             );
 
@@ -81,6 +82,11 @@ def init_db() -> None:
             );
             """
         )
+        # Миграция для старых БД: добавляем колонку status, если её нет
+        try:
+            connection.execute("ALTER TABLE leads ADD COLUMN status TEXT NOT NULL DEFAULT 'open'")
+        except Exception:
+            pass
 
 
 def create_session(title: str = "Новый диалог") -> dict:
@@ -176,8 +182,8 @@ def clear_all_sessions() -> int:
 def add_lead(session_id: str, name: str, phone: str, company: str, summary: str) -> int:
     with _connect() as connection:
         cursor = connection.execute(
-            "INSERT INTO leads (session_id, name, phone, company, summary, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (session_id, name, phone, company, summary, _now()),
+            "INSERT INTO leads (session_id, name, phone, company, summary, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (session_id, name, phone, company, summary, _now(), "open"),
         )
         return int(cursor.lastrowid)
 
@@ -307,6 +313,14 @@ def list_all_sessions(limit: int = 50) -> list[dict]:
             (limit,),
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def update_lead_status(lead_id: int, status: str) -> bool:
+    if status not in ("open", "closed"):
+        return False
+    with _connect() as connection:
+        cur = connection.execute("UPDATE leads SET status = ? WHERE id = ?", (status, lead_id))
+        return cur.rowcount > 0
 
 
 def stats() -> dict[str, Any]:

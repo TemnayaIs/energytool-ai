@@ -632,7 +632,23 @@
     const form = els.authForm;
     const username = form.elements.username.value.trim();
     const password = form.elements.password.value;
+    const adminMode = document.getElementById("authAdminMode")?.checked;
+    if (authMode === "register") {
+      const name = form.elements.name.value.trim();
+      const phone = form.elements.phone.value.trim();
+      const company = form.elements.company.value.trim();
+      if (name.length < 2) { els.authError.textContent = "Имя: минимум 2 символа"; els.authError.hidden = false; return; }
+      const digits = phone.replace(/\D/g, "");
+      if (digits.length < 10 || digits.length > 15) { els.authError.textContent = "Телефон: 10-15 цифр"; els.authError.hidden = false; return; }
+      if (company.length < 2) { els.authError.textContent = "Компания: минимум 2 символа"; els.authError.hidden = false; return; }
+    }
     try {
+      if (adminMode) {
+        const data = await api("/api/auth/login", { method: "POST", body: JSON.stringify({ username, password }) });
+        if (data.user.role !== "admin") throw new Error("Нет прав администратора");
+        window.location.href = "/admin?token=" + encodeURIComponent(data.token);
+        return;
+      }
       if (authMode === "register") {
         const data = await api("/api/auth/register", {
           method: "POST",
@@ -763,8 +779,12 @@
       const leads = data.leads || [];
       if (!leads.length) body.appendChild(node("div", "", "Заявок пока нет."));
       leads.slice(0, 10).forEach(l => {
+        const status = l.status || "open";
+        const statusColor = status === "closed" ? "#1fa97a" : "#f2b544";
         const row = node("div", "lead-item");
-        row.innerHTML = "<strong>Заявка #" + l.id + "</strong> — " + l.name + ", " + l.phone + (l.company ? ", " + l.company : "") + "<br><span style='font-size:10px;color:#8c94a4'>" + l.created_at + "</span>";
+        row.innerHTML = "<strong>Заявка #" + l.id + "</strong> — " + l.name + ", " + l.phone + (l.company ? ", " + l.company : "") +
+          ' <span style="display:inline-block;padding:1px 6px;border-radius:999px;font-size:9px;font-weight:700;background:' + statusColor + '22;color:' + statusColor + '">' + (status === "closed" ? "Закрыта" : "Открыта") + '</span>' +
+          "<br><span style='font-size:10px;color:#8c94a4'>" + l.created_at + "</span>";
         if (l.summary) {
           const sum = node("div", "", l.summary.length > 150 ? l.summary.slice(0, 150) + "…" : l.summary);
           sum.style.fontSize = "10px";

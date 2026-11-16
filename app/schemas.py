@@ -62,6 +62,19 @@ class RegisterIn(BaseModel):
             raise ValueError("username без пробелов")
         return value
 
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: str) -> str:
+        digits = re.sub(r"\D", "", value or "")
+        if value and not (10 <= len(digits) <= 15):
+            raise ValueError("телефон: 10-15 цифр")
+        return (value or "").strip()
+
+    @field_validator("name", "company")
+    @classmethod
+    def strip_text2(cls, value: str) -> str:
+        return " ".join((value or "").split())
+
 
 class LoginIn(BaseModel):
     username: str = Field(min_length=1, max_length=40)

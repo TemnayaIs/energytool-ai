@@ -210,6 +210,22 @@ async def admin_forward_lead(lead_id: int, request: Request):
     # Mark as forwarded by updating summary? Just return ok with a message.
     return {"ok": True, "lead_id": lead_id, "summary": lead.get("summary", ""), "message": "Заявка передана менеджеру"}
 
+@app.patch("/api/admin/leads/{lead_id}/status")
+async def admin_update_lead_status(lead_id: int, request: Request):
+    _require_admin(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    status = (body.get("status") or "").strip().lower()
+    if status not in ("open", "closed"):
+        raise HTTPException(status_code=400, detail="Статус: open или closed")
+    ok = store.update_lead_status(lead_id, status)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    return {"ok": True, "lead_id": lead_id, "status": status}
+
+
 
 @app.get("/api/sessions")
 async def sessions():

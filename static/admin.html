@@ -83,6 +83,10 @@
       return fetch(p, { headers: h, ...opts }).then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail||'Ошибка'); return d; }));
     };
 
+    // Подхватываем токен из URL (при переходе с главной страницы)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlToken = urlParams.get('token');
+    if (urlToken) { localStorage.setItem('et_token', urlToken); window.history.replaceState({}, '', '/admin'); }
     let token = localStorage.getItem('et_token');
 
     function applyTheme(t) { document.documentElement.setAttribute('data-theme', t); localStorage.setItem('et_theme', t); }
@@ -181,10 +185,23 @@
       filtered.forEach(l => {
         const row = document.createElement('div');
         row.className = 'lead-row';
-        const summary = (l.summary || '').replace(/\\n/g, '<br>');
-        row.innerHTML = '<strong>Заявка #' + l.id + '</strong> — ' + l.name + ', ' + l.phone + (l.company ? ', ' + l.company : '') +
-          '<div class="lead-meta">' + l.created_at + '</div>' +
-          (l.summary ? '<div class="lead-summary">' + summary + '</div>' : '');
+        const status = l.status || 'open';
+        const statusColor = status === 'closed' ? '#1fa97a' : '#f2b544';
+        const summary = (l.summary || '').replace(/\n/g, '<br>');
+        const titleDiv = document.createElement('div');
+        titleDiv.innerHTML = '<strong>Заявка #' + l.id + '</strong> — ' + l.name + ', ' + l.phone + (l.company ? ', ' + l.company : '') +
+          ' <span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;background:' + statusColor + '22;color:' + statusColor + '">' + (status === 'closed' ? 'Закрыта' : 'Открыта') + '</span>';
+        row.appendChild(titleDiv);
+        const meta = document.createElement('div');
+        meta.className = 'lead-meta';
+        meta.textContent = l.created_at;
+        row.appendChild(meta);
+        if (l.summary) {
+          const sum = document.createElement('div');
+          sum.className = 'lead-summary';
+          sum.innerHTML = summary;
+          row.appendChild(sum);
+        }
         const btns = document.createElement('div');
         btns.className = 'btn-row';
         const copyBtn = document.createElement('button');
@@ -192,6 +209,16 @@
         copyBtn.textContent = 'Копировать контакты';
         copyBtn.onclick = () => { navigator.clipboard.writeText(l.name + ' | ' + l.phone + ' | ' + l.company); alert('Контакты скопированы'); };
         btns.appendChild(copyBtn);
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'btn-sm';
+        toggleBtn.textContent = status === 'closed' ? 'Открыть' : 'Закрыть';
+        toggleBtn.onclick = async () => {
+          try {
+            await API('/api/admin/leads/' + l.id + '/status', { method: 'PATCH', body: JSON.stringify({ status: status === 'closed' ? 'open' : 'closed' }) });
+            await loadLeads();
+          } catch (e) { alert(e.message); }
+        };
+        btns.appendChild(toggleBtn);
         row.appendChild(btns);
         box.appendChild(row);
       });
