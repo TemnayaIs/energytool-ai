@@ -83,7 +83,7 @@ class Settings:
             emb_api_key=env("EMB_API_KEY"),
             enable_thinking=env_flag("ENABLE_THINKING", True),
             self_check=env_flag("SELF_CHECK", False),
-            fewshot_k=env_number("FEWSHOT_K", 4, 0, 8),
+            fewshot_k=env_number("FEWSHOT_K", 2, 0, 8),
             rerank_template=env_flag("RERANK_TEMPLATE", True),
             fewshot_exclude_exact=env_flag("FEWSHOT_EXCLUDE_EXACT", False),
         )
